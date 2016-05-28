@@ -1,0 +1,3145 @@
+   1               		.file	"Print.cpp"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__RAMPZ__ = 0x3b
+   6               	__tmp_reg__ = 0
+   7               	__zero_reg__ = 1
+   8               		.text
+   9               	.Ltext0:
+  10               		.cfi_sections	.debug_frame
+  12               	_ZL14printf_putcharcP6__file:
+  13               	.LFB55:
+  14               		.file 1 "Lib/Print.cpp"
+   1:Lib/Print.cpp **** /*
+   2:Lib/Print.cpp ****  Print.cpp - Base class that provides print() and println()
+   3:Lib/Print.cpp ****  Copyright (c) 2008 David A. Mellis.  All right reserved.
+   4:Lib/Print.cpp ****  many modifications, by Paul Stoffregen <paul@pjrc.com>
+   5:Lib/Print.cpp ****  
+   6:Lib/Print.cpp ****  This library is free software; you can redistribute it and/or
+   7:Lib/Print.cpp ****  modify it under the terms of the GNU Lesser General Public
+   8:Lib/Print.cpp ****  License as published by the Free Software Foundation; either
+   9:Lib/Print.cpp ****  version 2.1 of the License, or (at your option) any later version.
+  10:Lib/Print.cpp ****  
+  11:Lib/Print.cpp ****  This library is distributed in the hope that it will be useful,
+  12:Lib/Print.cpp ****  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  13:Lib/Print.cpp ****  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  14:Lib/Print.cpp ****  Lesser General Public License for more details.
+  15:Lib/Print.cpp ****  
+  16:Lib/Print.cpp ****  You should have received a copy of the GNU Lesser General Public
+  17:Lib/Print.cpp ****  License along with this library; if not, write to the Free Software
+  18:Lib/Print.cpp ****  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+  19:Lib/Print.cpp ****  
+  20:Lib/Print.cpp ****  Modified 23 November 2006 by David A. Mellis
+  21:Lib/Print.cpp ****  */
+  22:Lib/Print.cpp **** 
+  23:Lib/Print.cpp **** #include <stdio.h>
+  24:Lib/Print.cpp **** #include <string.h>
+  25:Lib/Print.cpp **** #include <inttypes.h>
+  26:Lib/Print.cpp **** #include <math.h>
+  27:Lib/Print.cpp **** #include <avr/pgmspace.h>
+  28:Lib/Print.cpp **** #include "wiring.h"
+  29:Lib/Print.cpp **** 
+  30:Lib/Print.cpp **** #include "Print.h"
+  31:Lib/Print.cpp **** 
+  32:Lib/Print.cpp **** 
+  33:Lib/Print.cpp **** #if ARDUINO >= 100
+  34:Lib/Print.cpp **** #else
+  35:Lib/Print.cpp **** void Print::write(const char *str)
+  36:Lib/Print.cpp **** {
+  37:Lib/Print.cpp **** 	write((const uint8_t *)str, strlen(str));
+  38:Lib/Print.cpp **** }
+  39:Lib/Print.cpp **** #endif
+  40:Lib/Print.cpp **** 
+  41:Lib/Print.cpp **** 
+  42:Lib/Print.cpp **** #if ARDUINO >= 100
+  43:Lib/Print.cpp **** size_t Print::write(const uint8_t *buffer, size_t size)
+  44:Lib/Print.cpp **** {
+  45:Lib/Print.cpp **** 	size_t count = 0;
+  46:Lib/Print.cpp **** 	while (size--) count += write(*buffer++);
+  47:Lib/Print.cpp **** 	return count;
+  48:Lib/Print.cpp **** }
+  49:Lib/Print.cpp **** #else
+  50:Lib/Print.cpp **** void Print::write(const uint8_t *buffer, size_t size)
+  51:Lib/Print.cpp **** {
+  52:Lib/Print.cpp **** 	while (size--) write(*buffer++);
+  53:Lib/Print.cpp **** }
+  54:Lib/Print.cpp **** #endif
+  55:Lib/Print.cpp **** 
+  56:Lib/Print.cpp **** 
+  57:Lib/Print.cpp **** /*
+  58:Lib/Print.cpp **** #if ARDUINO >= 100
+  59:Lib/Print.cpp **** size_t Print::print(const String &s)
+  60:Lib/Print.cpp **** {
+  61:Lib/Print.cpp **** 	uint8_t buffer[33];
+  62:Lib/Print.cpp **** 	size_t count = 0;
+  63:Lib/Print.cpp **** 	unsigned int index = 0;
+  64:Lib/Print.cpp **** 	unsigned int len = s.length();
+  65:Lib/Print.cpp **** 	while (len > 0) {
+  66:Lib/Print.cpp **** 		s.getBytes(buffer, sizeof(buffer), index);
+  67:Lib/Print.cpp **** 		unsigned int nbytes = len;
+  68:Lib/Print.cpp **** 		if (nbytes > sizeof(buffer)-1) nbytes = sizeof(buffer)-1;
+  69:Lib/Print.cpp **** 		index += nbytes;
+  70:Lib/Print.cpp **** 		len -= nbytes;
+  71:Lib/Print.cpp **** 		count += write(buffer, nbytes);
+  72:Lib/Print.cpp **** 	}
+  73:Lib/Print.cpp **** 	return count;
+  74:Lib/Print.cpp **** }
+  75:Lib/Print.cpp **** #else
+  76:Lib/Print.cpp **** void Print::print(const String &s)
+  77:Lib/Print.cpp **** {
+  78:Lib/Print.cpp **** 	unsigned int len = s.length();
+  79:Lib/Print.cpp **** 	for (unsigned int i=0; i < len; i++) {
+  80:Lib/Print.cpp **** 		write(s[i]);
+  81:Lib/Print.cpp **** 	}
+  82:Lib/Print.cpp **** }
+  83:Lib/Print.cpp **** #endif
+  84:Lib/Print.cpp **** */
+  85:Lib/Print.cpp **** 
+  86:Lib/Print.cpp **** #if ARDUINO >= 100
+  87:Lib/Print.cpp **** size_t Print::print(const __FlashStringHelper *ifsh)
+  88:Lib/Print.cpp **** {
+  89:Lib/Print.cpp **** 	uint8_t buffer[32];
+  90:Lib/Print.cpp **** 	size_t count = 0;
+  91:Lib/Print.cpp **** 	const char PROGMEM *p = (const char PROGMEM *)ifsh;
+  92:Lib/Print.cpp **** 	unsigned int len = strlen_P(p);
+  93:Lib/Print.cpp **** 	while (len > 0) {
+  94:Lib/Print.cpp **** 		unsigned int nbytes = len;
+  95:Lib/Print.cpp **** 		if (nbytes > sizeof(buffer)) nbytes = sizeof(buffer);
+  96:Lib/Print.cpp **** 		memcpy_P(buffer, p, nbytes);
+  97:Lib/Print.cpp **** 		p += nbytes;
+  98:Lib/Print.cpp **** 		len -= nbytes;
+  99:Lib/Print.cpp **** 		count += write(buffer, nbytes);
+ 100:Lib/Print.cpp **** 	}
+ 101:Lib/Print.cpp **** 	return count;
+ 102:Lib/Print.cpp **** }
+ 103:Lib/Print.cpp **** #else
+ 104:Lib/Print.cpp **** void Print::print(const __FlashStringHelper *ifsh)
+ 105:Lib/Print.cpp **** {
+ 106:Lib/Print.cpp **** 	const char PROGMEM *p = (const char PROGMEM *)ifsh;
+ 107:Lib/Print.cpp **** 	while (1) {
+ 108:Lib/Print.cpp **** 		unsigned char c = pgm_read_byte(p++);
+ 109:Lib/Print.cpp **** 		if (c == 0) return;
+ 110:Lib/Print.cpp **** 		write(c);
+ 111:Lib/Print.cpp **** 	}
+ 112:Lib/Print.cpp **** }
+ 113:Lib/Print.cpp **** #endif
+ 114:Lib/Print.cpp **** 
+ 115:Lib/Print.cpp **** 
+ 116:Lib/Print.cpp **** #if ARDUINO >= 100
+ 117:Lib/Print.cpp **** size_t Print::print(long n)
+ 118:Lib/Print.cpp **** {
+ 119:Lib/Print.cpp **** 	uint8_t sign=0;
+ 120:Lib/Print.cpp **** 
+ 121:Lib/Print.cpp **** 	if (n < 0) {
+ 122:Lib/Print.cpp **** 		sign = 1;
+ 123:Lib/Print.cpp **** 		n = -n;
+ 124:Lib/Print.cpp **** 	}
+ 125:Lib/Print.cpp **** 	return printNumber(n, sign, 10);
+ 126:Lib/Print.cpp **** }
+ 127:Lib/Print.cpp **** #else
+ 128:Lib/Print.cpp **** void Print::print(long n)
+ 129:Lib/Print.cpp **** {
+ 130:Lib/Print.cpp **** 	uint8_t sign=0;
+ 131:Lib/Print.cpp **** 
+ 132:Lib/Print.cpp **** 	if (n < 0) {
+ 133:Lib/Print.cpp **** 		sign = 1;
+ 134:Lib/Print.cpp **** 		n = -n;
+ 135:Lib/Print.cpp **** 	}
+ 136:Lib/Print.cpp **** 	printNumber(n, sign, 10);
+ 137:Lib/Print.cpp **** }
+ 138:Lib/Print.cpp **** #endif
+ 139:Lib/Print.cpp **** 
+ 140:Lib/Print.cpp **** 
+ 141:Lib/Print.cpp **** #if ARDUINO >= 100
+ 142:Lib/Print.cpp **** size_t Print::println(void)
+ 143:Lib/Print.cpp **** {
+ 144:Lib/Print.cpp **** 	uint8_t buf[2]={'\r', '\n'};
+ 145:Lib/Print.cpp **** 	return write(buf, 2);
+ 146:Lib/Print.cpp **** }
+ 147:Lib/Print.cpp **** #else
+ 148:Lib/Print.cpp **** void Print::println(void)
+ 149:Lib/Print.cpp **** {
+ 150:Lib/Print.cpp **** 	uint8_t buf[2]={'\r', '\n'};
+ 151:Lib/Print.cpp **** 	write(buf, 2);
+ 152:Lib/Print.cpp **** }
+ 153:Lib/Print.cpp **** #endif
+ 154:Lib/Print.cpp **** 
+ 155:Lib/Print.cpp **** 
+ 156:Lib/Print.cpp **** #if ARDUINO >= 100
+ 157:Lib/Print.cpp **** static int printf_putchar(char c, FILE *fp)
+ 158:Lib/Print.cpp **** {
+  15               		.loc 1 158 0
+  16               		.cfi_startproc
+  17               	.LVL0:
+  18               	/* prologue: function */
+  19               	/* frame size = 0 */
+  20               	/* stack size = 0 */
+  21               	.L__stack_usage = 0
+ 159:Lib/Print.cpp **** 	((class Print *)(fdev_get_udata(fp)))->write((uint8_t)c);
+  22               		.loc 1 159 0
+  23 0000 FB01      		movw r30,r22
+  24 0002 A485      		ldd r26,Z+12
+  25 0004 B585      		ldd r27,Z+13
+  26 0006 ED91      		ld r30,X+
+  27 0008 FC91      		ld r31,X
+  28 000a 1197      		sbiw r26,1
+  29 000c 0190      		ld __tmp_reg__,Z+
+  30 000e F081      		ld r31,Z
+  31 0010 E02D      		mov r30,__tmp_reg__
+  32 0012 682F      		mov r22,r24
+  33               	.LVL1:
+  34 0014 CD01      		movw r24,r26
+  35               	.LVL2:
+  36 0016 0995      		icall
+  37               	.LVL3:
+ 160:Lib/Print.cpp **** 	return 0;
+ 161:Lib/Print.cpp **** }
+  38               		.loc 1 161 0
+  39 0018 80E0      		ldi r24,0
+  40 001a 90E0      		ldi r25,0
+  41 001c 0895      		ret
+  42               		.cfi_endproc
+  43               	.LFE55:
+  45               	.global	_ZN5Print5writeEPKhj
+  47               	_ZN5Print5writeEPKhj:
+  48               	.LFB51:
+  44:Lib/Print.cpp **** {
+  49               		.loc 1 44 0
+  50               		.cfi_startproc
+  51               	.LVL4:
+  52 001e CF92      		push r12
+  53               	.LCFI0:
+  54               		.cfi_def_cfa_offset 3
+  55               		.cfi_offset 12, -2
+  56 0020 DF92      		push r13
+  57               	.LCFI1:
+  58               		.cfi_def_cfa_offset 4
+  59               		.cfi_offset 13, -3
+  60 0022 EF92      		push r14
+  61               	.LCFI2:
+  62               		.cfi_def_cfa_offset 5
+  63               		.cfi_offset 14, -4
+  64 0024 FF92      		push r15
+  65               	.LCFI3:
+  66               		.cfi_def_cfa_offset 6
+  67               		.cfi_offset 15, -5
+  68 0026 0F93      		push r16
+  69               	.LCFI4:
+  70               		.cfi_def_cfa_offset 7
+  71               		.cfi_offset 16, -6
+  72 0028 1F93      		push r17
+  73               	.LCFI5:
+  74               		.cfi_def_cfa_offset 8
+  75               		.cfi_offset 17, -7
+  76 002a CF93      		push r28
+  77               	.LCFI6:
+  78               		.cfi_def_cfa_offset 9
+  79               		.cfi_offset 28, -8
+  80 002c DF93      		push r29
+  81               	.LCFI7:
+  82               		.cfi_def_cfa_offset 10
+  83               		.cfi_offset 29, -9
+  84               	/* prologue: function */
+  85               	/* frame size = 0 */
+  86               	/* stack size = 8 */
+  87               	.L__stack_usage = 8
+  88 002e 6C01      		movw r12,r24
+  89 0030 7A01      		movw r14,r20
+  90               	.LVL5:
+  91 0032 EB01      		movw r28,r22
+  92 0034 E60E      		add r14,r22
+  93 0036 F71E      		adc r15,r23
+  94               	.LBB15:
+  45:Lib/Print.cpp **** 	size_t count = 0;
+  95               		.loc 1 45 0
+  96 0038 00E0      		ldi r16,0
+  97 003a 10E0      		ldi r17,0
+  98               	.LVL6:
+  99               	.L3:
+  46:Lib/Print.cpp **** 	while (size--) count += write(*buffer++);
+ 100               		.loc 1 46 0 discriminator 1
+ 101 003c CE15      		cp r28,r14
+ 102 003e DF05      		cpc r29,r15
+ 103 0040 01F0      		breq .L6
+ 104               	.LVL7:
+  46:Lib/Print.cpp **** 	while (size--) count += write(*buffer++);
+ 105               		.loc 1 46 0 is_stmt 0 discriminator 2
+ 106 0042 6991      		ld r22,Y+
+ 107               	.LVL8:
+ 108 0044 D601      		movw r26,r12
+ 109 0046 ED91      		ld r30,X+
+ 110 0048 FC91      		ld r31,X
+ 111 004a 0190      		ld __tmp_reg__,Z+
+ 112 004c F081      		ld r31,Z
+ 113 004e E02D      		mov r30,__tmp_reg__
+ 114 0050 C601      		movw r24,r12
+ 115 0052 0995      		icall
+ 116               	.LVL9:
+ 117 0054 080F      		add r16,r24
+ 118 0056 191F      		adc r17,r25
+ 119               	.LVL10:
+ 120 0058 00C0      		rjmp .L3
+ 121               	.LVL11:
+ 122               	.L6:
+ 123               	.LBE15:
+  48:Lib/Print.cpp **** }
+ 124               		.loc 1 48 0 is_stmt 1
+ 125 005a C801      		movw r24,r16
+ 126               	/* epilogue start */
+ 127 005c DF91      		pop r29
+ 128 005e CF91      		pop r28
+ 129               	.LVL12:
+ 130 0060 1F91      		pop r17
+ 131 0062 0F91      		pop r16
+ 132               	.LVL13:
+ 133 0064 FF90      		pop r15
+ 134 0066 EF90      		pop r14
+ 135 0068 DF90      		pop r13
+ 136 006a CF90      		pop r12
+ 137               	.LVL14:
+ 138 006c 0895      		ret
+ 139               		.cfi_endproc
+ 140               	.LFE51:
+ 142               	.global	_ZN5Print5printEPK19__FlashStringHelper
+ 144               	_ZN5Print5printEPK19__FlashStringHelper:
+ 145               	.LFB52:
+  88:Lib/Print.cpp **** {
+ 146               		.loc 1 88 0
+ 147               		.cfi_startproc
+ 148               	.LVL15:
+ 149 006e 8F92      		push r8
+ 150               	.LCFI8:
+ 151               		.cfi_def_cfa_offset 3
+ 152               		.cfi_offset 8, -2
+ 153 0070 9F92      		push r9
+ 154               	.LCFI9:
+ 155               		.cfi_def_cfa_offset 4
+ 156               		.cfi_offset 9, -3
+ 157 0072 AF92      		push r10
+ 158               	.LCFI10:
+ 159               		.cfi_def_cfa_offset 5
+ 160               		.cfi_offset 10, -4
+ 161 0074 BF92      		push r11
+ 162               	.LCFI11:
+ 163               		.cfi_def_cfa_offset 6
+ 164               		.cfi_offset 11, -5
+ 165 0076 CF92      		push r12
+ 166               	.LCFI12:
+ 167               		.cfi_def_cfa_offset 7
+ 168               		.cfi_offset 12, -6
+ 169 0078 DF92      		push r13
+ 170               	.LCFI13:
+ 171               		.cfi_def_cfa_offset 8
+ 172               		.cfi_offset 13, -7
+ 173 007a EF92      		push r14
+ 174               	.LCFI14:
+ 175               		.cfi_def_cfa_offset 9
+ 176               		.cfi_offset 14, -8
+ 177 007c FF92      		push r15
+ 178               	.LCFI15:
+ 179               		.cfi_def_cfa_offset 10
+ 180               		.cfi_offset 15, -9
+ 181 007e 0F93      		push r16
+ 182               	.LCFI16:
+ 183               		.cfi_def_cfa_offset 11
+ 184               		.cfi_offset 16, -10
+ 185 0080 1F93      		push r17
+ 186               	.LCFI17:
+ 187               		.cfi_def_cfa_offset 12
+ 188               		.cfi_offset 17, -11
+ 189 0082 CF93      		push r28
+ 190               	.LCFI18:
+ 191               		.cfi_def_cfa_offset 13
+ 192               		.cfi_offset 28, -12
+ 193 0084 DF93      		push r29
+ 194               	.LCFI19:
+ 195               		.cfi_def_cfa_offset 14
+ 196               		.cfi_offset 29, -13
+ 197 0086 CDB7      		in r28,__SP_L__
+ 198 0088 DEB7      		in r29,__SP_H__
+ 199               	.LCFI20:
+ 200               		.cfi_def_cfa_register 28
+ 201 008a A097      		sbiw r28,32
+ 202               	.LCFI21:
+ 203               		.cfi_def_cfa_offset 46
+ 204 008c 0FB6      		in __tmp_reg__,__SREG__
+ 205 008e F894      		cli
+ 206 0090 DEBF      		out __SP_H__,r29
+ 207 0092 0FBE      		out __SREG__,__tmp_reg__
+ 208 0094 CDBF      		out __SP_L__,r28
+ 209               	/* prologue: function */
+ 210               	/* frame size = 32 */
+ 211               	/* stack size = 44 */
+ 212               	.L__stack_usage = 44
+ 213 0096 4C01      		movw r8,r24
+ 214 0098 6B01      		movw r12,r22
+ 215               	.LVL16:
+ 216               	.LBB16:
+ 217               	.LBB17:
+ 218               	.LBB18:
+ 219               		.file 2 "/usr/lib/avr/include/avr/pgmspace.h"
+   1:/usr/lib/avr/include/avr/pgmspace.h **** /* Copyright (c) 2002-2007  Marek Michalkiewicz
+   2:/usr/lib/avr/include/avr/pgmspace.h ****    Copyright (c) 2006, Carlos Lamas
+   3:/usr/lib/avr/include/avr/pgmspace.h ****    Copyright (c) 2009-2010, Jan Waclawek
+   4:/usr/lib/avr/include/avr/pgmspace.h ****    All rights reserved.
+   5:/usr/lib/avr/include/avr/pgmspace.h **** 
+   6:/usr/lib/avr/include/avr/pgmspace.h ****    Redistribution and use in source and binary forms, with or without
+   7:/usr/lib/avr/include/avr/pgmspace.h ****    modification, are permitted provided that the following conditions are met:
+   8:/usr/lib/avr/include/avr/pgmspace.h **** 
+   9:/usr/lib/avr/include/avr/pgmspace.h ****    * Redistributions of source code must retain the above copyright
+  10:/usr/lib/avr/include/avr/pgmspace.h ****      notice, this list of conditions and the following disclaimer.
+  11:/usr/lib/avr/include/avr/pgmspace.h ****    * Redistributions in binary form must reproduce the above copyright
+  12:/usr/lib/avr/include/avr/pgmspace.h ****      notice, this list of conditions and the following disclaimer in
+  13:/usr/lib/avr/include/avr/pgmspace.h ****      the documentation and/or other materials provided with the
+  14:/usr/lib/avr/include/avr/pgmspace.h ****      distribution.
+  15:/usr/lib/avr/include/avr/pgmspace.h ****    * Neither the name of the copyright holders nor the names of
+  16:/usr/lib/avr/include/avr/pgmspace.h ****      contributors may be used to endorse or promote products derived
+  17:/usr/lib/avr/include/avr/pgmspace.h ****      from this software without specific prior written permission.
+  18:/usr/lib/avr/include/avr/pgmspace.h **** 
+  19:/usr/lib/avr/include/avr/pgmspace.h ****   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  20:/usr/lib/avr/include/avr/pgmspace.h ****   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  21:/usr/lib/avr/include/avr/pgmspace.h ****   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  22:/usr/lib/avr/include/avr/pgmspace.h ****   ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  23:/usr/lib/avr/include/avr/pgmspace.h ****   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  24:/usr/lib/avr/include/avr/pgmspace.h ****   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  25:/usr/lib/avr/include/avr/pgmspace.h ****   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  26:/usr/lib/avr/include/avr/pgmspace.h ****   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  27:/usr/lib/avr/include/avr/pgmspace.h ****   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  28:/usr/lib/avr/include/avr/pgmspace.h ****   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  29:/usr/lib/avr/include/avr/pgmspace.h ****   POSSIBILITY OF SUCH DAMAGE. */
+  30:/usr/lib/avr/include/avr/pgmspace.h **** 
+  31:/usr/lib/avr/include/avr/pgmspace.h **** /* $Id: pgmspace.h 2270 2011-12-29 08:42:00Z joerg_wunsch $ */
+  32:/usr/lib/avr/include/avr/pgmspace.h **** 
+  33:/usr/lib/avr/include/avr/pgmspace.h **** /*
+  34:/usr/lib/avr/include/avr/pgmspace.h ****    pgmspace.h
+  35:/usr/lib/avr/include/avr/pgmspace.h **** 
+  36:/usr/lib/avr/include/avr/pgmspace.h ****    Contributors:
+  37:/usr/lib/avr/include/avr/pgmspace.h ****      Created by Marek Michalkiewicz <marekm@linux.org.pl>
+  38:/usr/lib/avr/include/avr/pgmspace.h ****      Eric B. Weddington <eric@ecentral.com>
+  39:/usr/lib/avr/include/avr/pgmspace.h ****      Wolfgang Haidinger <wh@vmars.tuwien.ac.at> (pgm_read_dword())
+  40:/usr/lib/avr/include/avr/pgmspace.h ****      Ivanov Anton <anton@arc.com.ru> (pgm_read_float())
+  41:/usr/lib/avr/include/avr/pgmspace.h ****  */
+  42:/usr/lib/avr/include/avr/pgmspace.h **** 
+  43:/usr/lib/avr/include/avr/pgmspace.h **** /** \file */
+  44:/usr/lib/avr/include/avr/pgmspace.h **** /** \defgroup avr_pgmspace <avr/pgmspace.h>: Program Space Utilities
+  45:/usr/lib/avr/include/avr/pgmspace.h ****     \code
+  46:/usr/lib/avr/include/avr/pgmspace.h ****     #include <avr/io.h>
+  47:/usr/lib/avr/include/avr/pgmspace.h ****     #include <avr/pgmspace.h>
+  48:/usr/lib/avr/include/avr/pgmspace.h ****     \endcode
+  49:/usr/lib/avr/include/avr/pgmspace.h **** 
+  50:/usr/lib/avr/include/avr/pgmspace.h ****     The functions in this module provide interfaces for a program to access
+  51:/usr/lib/avr/include/avr/pgmspace.h ****     data stored in program space (flash memory) of the device.  In order to
+  52:/usr/lib/avr/include/avr/pgmspace.h ****     use these functions, the target device must support either the \c LPM or
+  53:/usr/lib/avr/include/avr/pgmspace.h ****     \c ELPM instructions.
+  54:/usr/lib/avr/include/avr/pgmspace.h **** 
+  55:/usr/lib/avr/include/avr/pgmspace.h ****     \note These functions are an attempt to provide some compatibility with
+  56:/usr/lib/avr/include/avr/pgmspace.h ****     header files that come with IAR C, to make porting applications between
+  57:/usr/lib/avr/include/avr/pgmspace.h ****     different compilers easier.  This is not 100% compatibility though (GCC
+  58:/usr/lib/avr/include/avr/pgmspace.h ****     does not have full support for multiple address spaces yet).
+  59:/usr/lib/avr/include/avr/pgmspace.h **** 
+  60:/usr/lib/avr/include/avr/pgmspace.h ****     \note If you are working with strings which are completely based in ram,
+  61:/usr/lib/avr/include/avr/pgmspace.h ****     use the standard string functions described in \ref avr_string.
+  62:/usr/lib/avr/include/avr/pgmspace.h **** 
+  63:/usr/lib/avr/include/avr/pgmspace.h ****     \note If possible, put your constant tables in the lower 64 KB and use
+  64:/usr/lib/avr/include/avr/pgmspace.h ****     pgm_read_byte_near() or pgm_read_word_near() instead of
+  65:/usr/lib/avr/include/avr/pgmspace.h ****     pgm_read_byte_far() or pgm_read_word_far() since it is more efficient that
+  66:/usr/lib/avr/include/avr/pgmspace.h ****     way, and you can still use the upper 64K for executable code.
+  67:/usr/lib/avr/include/avr/pgmspace.h ****     All functions that are suffixed with a \c _P \e require their
+  68:/usr/lib/avr/include/avr/pgmspace.h ****     arguments to be in the lower 64 KB of the flash ROM, as they do
+  69:/usr/lib/avr/include/avr/pgmspace.h ****     not use ELPM instructions.  This is normally not a big concern as
+  70:/usr/lib/avr/include/avr/pgmspace.h ****     the linker setup arranges any program space constants declared
+  71:/usr/lib/avr/include/avr/pgmspace.h ****     using the macros from this header file so they are placed right after
+  72:/usr/lib/avr/include/avr/pgmspace.h ****     the interrupt vectors, and in front of any executable code.  However,
+  73:/usr/lib/avr/include/avr/pgmspace.h ****     it can become a problem if there are too many of these constants, or
+  74:/usr/lib/avr/include/avr/pgmspace.h ****     for bootloaders on devices with more than 64 KB of ROM.
+  75:/usr/lib/avr/include/avr/pgmspace.h ****     <em>All these functions will not work in that situation.</em>
+  76:/usr/lib/avr/include/avr/pgmspace.h **** 
+  77:/usr/lib/avr/include/avr/pgmspace.h ****     \note For <b>Xmega</b> devices, make sure the NVM controller
+  78:/usr/lib/avr/include/avr/pgmspace.h ****     command register (\c NVM.CMD or \c NVM_CMD) is set to 0x00 (NOP)
+  79:/usr/lib/avr/include/avr/pgmspace.h ****     before using any of these functions.
+  80:/usr/lib/avr/include/avr/pgmspace.h **** */
+  81:/usr/lib/avr/include/avr/pgmspace.h **** 
+  82:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef __PGMSPACE_H_
+  83:/usr/lib/avr/include/avr/pgmspace.h **** #define __PGMSPACE_H_ 1
+  84:/usr/lib/avr/include/avr/pgmspace.h **** 
+  85:/usr/lib/avr/include/avr/pgmspace.h **** #define __need_size_t
+  86:/usr/lib/avr/include/avr/pgmspace.h **** #include <inttypes.h>
+  87:/usr/lib/avr/include/avr/pgmspace.h **** #include <stddef.h>
+  88:/usr/lib/avr/include/avr/pgmspace.h **** #include <avr/io.h>
+  89:/usr/lib/avr/include/avr/pgmspace.h **** 
+  90:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef __ATTR_CONST__
+  91:/usr/lib/avr/include/avr/pgmspace.h **** #define __ATTR_CONST__ __attribute__((__const__))
+  92:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+  93:/usr/lib/avr/include/avr/pgmspace.h **** 
+  94:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef __ATTR_PROGMEM__
+  95:/usr/lib/avr/include/avr/pgmspace.h **** #define __ATTR_PROGMEM__ __attribute__((__progmem__))
+  96:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+  97:/usr/lib/avr/include/avr/pgmspace.h **** 
+  98:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef __ATTR_PURE__
+  99:/usr/lib/avr/include/avr/pgmspace.h **** #define __ATTR_PURE__ __attribute__((__pure__))
+ 100:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 101:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 102:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 103:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 104:/usr/lib/avr/include/avr/pgmspace.h ****    \def PROGMEM
+ 105:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 106:/usr/lib/avr/include/avr/pgmspace.h ****    Attribute to use in order to declare an object being located in
+ 107:/usr/lib/avr/include/avr/pgmspace.h ****    flash ROM.
+ 108:/usr/lib/avr/include/avr/pgmspace.h ****  */
+ 109:/usr/lib/avr/include/avr/pgmspace.h **** #define PROGMEM __ATTR_PROGMEM__
+ 110:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 111:/usr/lib/avr/include/avr/pgmspace.h **** #ifdef __cplusplus
+ 112:/usr/lib/avr/include/avr/pgmspace.h **** extern "C" {
+ 113:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 114:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 115:/usr/lib/avr/include/avr/pgmspace.h **** #if defined(__DOXYGEN__)
+ 116:/usr/lib/avr/include/avr/pgmspace.h **** /*
+ 117:/usr/lib/avr/include/avr/pgmspace.h ****  * Doxygen doesn't grok the appended attribute syntax of
+ 118:/usr/lib/avr/include/avr/pgmspace.h ****  * GCC, and confuses the typedefs with function decls, so
+ 119:/usr/lib/avr/include/avr/pgmspace.h ****  * supply a doxygen-friendly view.
+ 120:/usr/lib/avr/include/avr/pgmspace.h ****  */
+ 121:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 122:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 123:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 124:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_void
+ 125:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 126:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 127:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 128:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 129:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 130:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 131:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 132:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 133:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 134:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 135:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 136:/usr/lib/avr/include/avr/pgmspace.h ****    Type of a "void" object located in flash ROM.  Does not make much
+ 137:/usr/lib/avr/include/avr/pgmspace.h ****    sense by itself, but can be used to declare a "void *" object in
+ 138:/usr/lib/avr/include/avr/pgmspace.h ****    flash ROM.
+ 139:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 140:/usr/lib/avr/include/avr/pgmspace.h **** typedef void PROGMEM prog_void;
+ 141:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 142:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 143:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 144:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_char
+ 145:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 146:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 147:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 148:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 149:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 150:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 151:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 152:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 153:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 154:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 155:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 156:/usr/lib/avr/include/avr/pgmspace.h ****    Type of a "char" object located in flash ROM.
+ 157:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 158:/usr/lib/avr/include/avr/pgmspace.h **** typedef char PROGMEM prog_char;
+ 159:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 160:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 161:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 162:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_uchar
+ 163:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 164:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 165:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 166:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 167:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 168:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 169:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 170:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 171:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 172:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 173:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 174:/usr/lib/avr/include/avr/pgmspace.h ****    Type of an "unsigned char" object located in flash ROM.
+ 175:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 176:/usr/lib/avr/include/avr/pgmspace.h **** typedef unsigned char PROGMEM prog_uchar;
+ 177:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 178:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 179:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 180:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_int8_t
+ 181:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 182:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 183:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 184:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 185:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 186:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 187:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 188:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 189:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 190:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 191:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 192:/usr/lib/avr/include/avr/pgmspace.h ****    Type of an "int8_t" object located in flash ROM.
+ 193:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 194:/usr/lib/avr/include/avr/pgmspace.h **** typedef int8_t PROGMEM prog_int8_t;
+ 195:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 196:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 197:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 198:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_uint8_t
+ 199:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 200:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 201:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 202:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 203:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 204:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 205:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 206:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 207:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 208:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 209:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 210:/usr/lib/avr/include/avr/pgmspace.h ****    Type of an "uint8_t" object located in flash ROM.
+ 211:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 212:/usr/lib/avr/include/avr/pgmspace.h **** typedef uint8_t PROGMEM prog_uint8_t;
+ 213:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 214:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 215:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 216:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_int16_t
+ 217:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 218:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 219:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 220:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 221:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 222:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 223:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 224:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 225:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 226:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 227:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 228:/usr/lib/avr/include/avr/pgmspace.h ****    Type of an "int16_t" object located in flash ROM.
+ 229:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 230:/usr/lib/avr/include/avr/pgmspace.h **** typedef int16_t PROGMEM prog_int16_t;
+ 231:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 232:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 233:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 234:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_uint16_t
+ 235:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 236:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 237:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 238:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 239:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 240:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 241:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 242:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 243:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 244:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 245:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 246:/usr/lib/avr/include/avr/pgmspace.h ****    Type of an "uint16_t" object located in flash ROM.
+ 247:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 248:/usr/lib/avr/include/avr/pgmspace.h **** typedef uint16_t PROGMEM prog_uint16_t;
+ 249:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 250:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 251:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 252:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_int32_t
+ 253:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 254:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 255:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 256:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 257:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 258:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 259:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 260:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 261:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 262:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 263:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 264:/usr/lib/avr/include/avr/pgmspace.h ****    Type of an "int32_t" object located in flash ROM.
+ 265:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 266:/usr/lib/avr/include/avr/pgmspace.h **** typedef int32_t PROGMEM prog_int32_t;
+ 267:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 268:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 269:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 270:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_uint32_t
+ 271:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 272:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 273:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 274:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 275:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 276:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 277:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 278:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 279:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 280:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 281:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 282:/usr/lib/avr/include/avr/pgmspace.h ****    Type of an "uint32_t" object located in flash ROM.
+ 283:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 284:/usr/lib/avr/include/avr/pgmspace.h **** typedef uint32_t PROGMEM prog_uint32_t;
+ 285:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 286:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 287:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 288:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_int64_t
+ 289:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 290:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 291:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 292:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 293:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 294:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 295:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 296:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 297:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 298:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 299:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 300:/usr/lib/avr/include/avr/pgmspace.h ****    Type of an "int64_t" object located in flash ROM.
+ 301:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 302:/usr/lib/avr/include/avr/pgmspace.h ****    \note This type is not available when the compiler
+ 303:/usr/lib/avr/include/avr/pgmspace.h ****    option -mint8 is in effect.
+ 304:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 305:/usr/lib/avr/include/avr/pgmspace.h **** typedef int64_t PROGMEM prog_int64_t;
+ 306:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 307:/usr/lib/avr/include/avr/pgmspace.h **** /**
+ 308:/usr/lib/avr/include/avr/pgmspace.h ****    \ingroup avr_pgmspace
+ 309:/usr/lib/avr/include/avr/pgmspace.h ****    \typedef prog_uint64_t
+ 310:/usr/lib/avr/include/avr/pgmspace.h ****    \note DEPRECATED
+ 311:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 312:/usr/lib/avr/include/avr/pgmspace.h ****    This typedef is now deprecated because the usage of the __progmem__ 
+ 313:/usr/lib/avr/include/avr/pgmspace.h ****    attribute on a type is not supported in GCC. However, the use of the 
+ 314:/usr/lib/avr/include/avr/pgmspace.h ****    __progmem__ attribute on a variable declaration is supported, and this is 
+ 315:/usr/lib/avr/include/avr/pgmspace.h ****    now the recommended usage.
+ 316:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 317:/usr/lib/avr/include/avr/pgmspace.h ****    The typedef is only visible if the macro __PROG_TYPES_COMPAT__
+ 318:/usr/lib/avr/include/avr/pgmspace.h ****    has been defined before including <avr/pgmspace.h> (either by a
+ 319:/usr/lib/avr/include/avr/pgmspace.h ****    #define directive, or by a -D compiler option.)
+ 320:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 321:/usr/lib/avr/include/avr/pgmspace.h ****    Type of an "uint64_t" object located in flash ROM.
+ 322:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 323:/usr/lib/avr/include/avr/pgmspace.h ****    \note This type is not available when the compiler
+ 324:/usr/lib/avr/include/avr/pgmspace.h ****    option -mint8 is in effect.
+ 325:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 326:/usr/lib/avr/include/avr/pgmspace.h **** typedef uint64_t PROGMEM prog_uint64_t;
+ 327:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 328:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 329:/usr/lib/avr/include/avr/pgmspace.h ****     \def PGM_P
+ 330:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 331:/usr/lib/avr/include/avr/pgmspace.h ****     Used to declare a variable that is a pointer to a string in program
+ 332:/usr/lib/avr/include/avr/pgmspace.h ****     space. */
+ 333:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 334:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef PGM_P
+ 335:/usr/lib/avr/include/avr/pgmspace.h **** #define PGM_P const char *
+ 336:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 337:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 338:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 339:/usr/lib/avr/include/avr/pgmspace.h ****     \def PGM_VOID_P
+ 340:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 341:/usr/lib/avr/include/avr/pgmspace.h ****     Used to declare a generic pointer to an object in program space. */
+ 342:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 343:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef PGM_VOID_P
+ 344:/usr/lib/avr/include/avr/pgmspace.h **** #define PGM_VOID_P const void *
+ 345:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 346:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 347:/usr/lib/avr/include/avr/pgmspace.h **** #elif defined(__PROG_TYPES_COMPAT__)  /* !DOXYGEN */
+ 348:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 349:/usr/lib/avr/include/avr/pgmspace.h **** typedef void prog_void __attribute__((__progmem__,deprecated("prog_void type is deprecated.")));
+ 350:/usr/lib/avr/include/avr/pgmspace.h **** typedef char prog_char __attribute__((__progmem__,deprecated("prog_char type is deprecated.")));
+ 351:/usr/lib/avr/include/avr/pgmspace.h **** typedef unsigned char prog_uchar __attribute__((__progmem__,deprecated("prog_uchar type is deprecat
+ 352:/usr/lib/avr/include/avr/pgmspace.h **** typedef int8_t    prog_int8_t   __attribute__((__progmem__,deprecated("prog_int8_t type is deprecat
+ 353:/usr/lib/avr/include/avr/pgmspace.h **** typedef uint8_t   prog_uint8_t  __attribute__((__progmem__,deprecated("prog_uint8_t type is depreca
+ 354:/usr/lib/avr/include/avr/pgmspace.h **** typedef int16_t   prog_int16_t  __attribute__((__progmem__,deprecated("prog_int16_t type is depreca
+ 355:/usr/lib/avr/include/avr/pgmspace.h **** typedef uint16_t  prog_uint16_t __attribute__((__progmem__,deprecated("prog_uint16_t type is deprec
+ 356:/usr/lib/avr/include/avr/pgmspace.h **** typedef int32_t   prog_int32_t  __attribute__((__progmem__,deprecated("prog_int32_t type is depreca
+ 357:/usr/lib/avr/include/avr/pgmspace.h **** typedef uint32_t  prog_uint32_t __attribute__((__progmem__,deprecated("prog_uint32_t type is deprec
+ 358:/usr/lib/avr/include/avr/pgmspace.h **** #if !__USING_MINT8
+ 359:/usr/lib/avr/include/avr/pgmspace.h **** typedef int64_t   prog_int64_t  __attribute__((__progmem__,deprecated("prog_int64_t type is depreca
+ 360:/usr/lib/avr/include/avr/pgmspace.h **** typedef uint64_t  prog_uint64_t __attribute__((__progmem__,deprecated("prog_uint64_t type is deprec
+ 361:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 362:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 363:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef PGM_P
+ 364:/usr/lib/avr/include/avr/pgmspace.h **** #define PGM_P const prog_char *
+ 365:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 366:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 367:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef PGM_VOID_P
+ 368:/usr/lib/avr/include/avr/pgmspace.h **** #define PGM_VOID_P const prog_void *
+ 369:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 370:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 371:/usr/lib/avr/include/avr/pgmspace.h **** #else /* !defined(__DOXYGEN__), !defined(__PROG_TYPES_COMPAT__) */
+ 372:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 373:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef PGM_P
+ 374:/usr/lib/avr/include/avr/pgmspace.h **** #define PGM_P const char *
+ 375:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 376:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 377:/usr/lib/avr/include/avr/pgmspace.h **** #ifndef PGM_VOID_P
+ 378:/usr/lib/avr/include/avr/pgmspace.h **** #define PGM_VOID_P const void *
+ 379:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 380:/usr/lib/avr/include/avr/pgmspace.h **** #endif /* defined(__DOXYGEN__), defined(__PROG_TYPES_COMPAT__) */
+ 381:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 382:/usr/lib/avr/include/avr/pgmspace.h **** /* Although in C, we can get away with just using __c, it does not work in
+ 383:/usr/lib/avr/include/avr/pgmspace.h ****    C++. We need to use &__c[0] to avoid the compiler puking. Dave Hylands
+ 384:/usr/lib/avr/include/avr/pgmspace.h ****    explaned it thusly,
+ 385:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 386:/usr/lib/avr/include/avr/pgmspace.h ****      Let's suppose that we use PSTR("Test"). In this case, the type returned
+ 387:/usr/lib/avr/include/avr/pgmspace.h ****      by __c is a prog_char[5] and not a prog_char *. While these are
+ 388:/usr/lib/avr/include/avr/pgmspace.h ****      compatible, they aren't the same thing (especially in C++). The type
+ 389:/usr/lib/avr/include/avr/pgmspace.h ****      returned by &__c[0] is a prog_char *, which explains why it works
+ 390:/usr/lib/avr/include/avr/pgmspace.h ****      fine. */
+ 391:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 392:/usr/lib/avr/include/avr/pgmspace.h **** #if defined(__DOXYGEN__)
+ 393:/usr/lib/avr/include/avr/pgmspace.h **** /*
+ 394:/usr/lib/avr/include/avr/pgmspace.h ****  * The #define below is just a dummy that serves documentation
+ 395:/usr/lib/avr/include/avr/pgmspace.h ****  * purposes only.
+ 396:/usr/lib/avr/include/avr/pgmspace.h ****  */
+ 397:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 398:/usr/lib/avr/include/avr/pgmspace.h ****     \def PSTR(s)
+ 399:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 400:/usr/lib/avr/include/avr/pgmspace.h ****     Used to declare a static pointer to a string in program space. */
+ 401:/usr/lib/avr/include/avr/pgmspace.h **** # define PSTR(s) ((const PROGMEM char *)(s))
+ 402:/usr/lib/avr/include/avr/pgmspace.h **** #else  /* !DOXYGEN */
+ 403:/usr/lib/avr/include/avr/pgmspace.h **** /* The real thing. */
+ 404:/usr/lib/avr/include/avr/pgmspace.h **** # define PSTR(s) (__extension__({static const char __c[] PROGMEM = (s); &__c[0];}))
+ 405:/usr/lib/avr/include/avr/pgmspace.h **** #endif /* DOXYGEN */
+ 406:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 407:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_classic__(addr)   \
+ 408:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                \
+ 409:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __addr16 = (uint16_t)(addr); \
+ 410:/usr/lib/avr/include/avr/pgmspace.h ****     uint8_t __result;           \
+ 411:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                     \
+ 412:/usr/lib/avr/include/avr/pgmspace.h ****     (                           \
+ 413:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm" "\n\t"            \
+ 414:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %0, r0" "\n\t"     \
+ 415:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)       \
+ 416:/usr/lib/avr/include/avr/pgmspace.h ****         : "z" (__addr16)        \
+ 417:/usr/lib/avr/include/avr/pgmspace.h ****         : "r0"                  \
+ 418:/usr/lib/avr/include/avr/pgmspace.h ****     );                          \
+ 419:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                   \
+ 420:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 421:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 422:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_enhanced__(addr)  \
+ 423:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                \
+ 424:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __addr16 = (uint16_t)(addr); \
+ 425:/usr/lib/avr/include/avr/pgmspace.h ****     uint8_t __result;           \
+ 426:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                     \
+ 427:/usr/lib/avr/include/avr/pgmspace.h ****     (                           \
+ 428:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %0, Z" "\n\t"      \
+ 429:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)       \
+ 430:/usr/lib/avr/include/avr/pgmspace.h ****         : "z" (__addr16)        \
+ 431:/usr/lib/avr/include/avr/pgmspace.h ****     );                          \
+ 432:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                   \
+ 433:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 434:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 435:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_word_classic__(addr)          \
+ 436:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                            \
+ 437:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __addr16 = (uint16_t)(addr);   \
+ 438:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __result;                      \
+ 439:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                                 \
+ 440:/usr/lib/avr/include/avr/pgmspace.h ****     (                                       \
+ 441:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 442:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %A0, r0"   "\n\t"              \
+ 443:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"   "\n\t"              \
+ 444:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 445:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %B0, r0"   "\n\t"              \
+ 446:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result), "=z" (__addr16)  \
+ 447:/usr/lib/avr/include/avr/pgmspace.h ****         : "1" (__addr16)                    \
+ 448:/usr/lib/avr/include/avr/pgmspace.h ****         : "r0"                              \
+ 449:/usr/lib/avr/include/avr/pgmspace.h ****     );                                      \
+ 450:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                               \
+ 451:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 452:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 453:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_word_enhanced__(addr)         \
+ 454:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                            \
+ 455:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __addr16 = (uint16_t)(addr);   \
+ 456:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __result;                      \
+ 457:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                                 \
+ 458:/usr/lib/avr/include/avr/pgmspace.h ****     (                                       \
+ 459:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %A0, Z+"   "\n\t"              \
+ 460:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %B0, Z"    "\n\t"              \
+ 461:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result), "=z" (__addr16)  \
+ 462:/usr/lib/avr/include/avr/pgmspace.h ****         : "1" (__addr16)                    \
+ 463:/usr/lib/avr/include/avr/pgmspace.h ****     );                                      \
+ 464:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                               \
+ 465:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 466:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 467:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_dword_classic__(addr)         \
+ 468:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                            \
+ 469:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __addr16 = (uint16_t)(addr);   \
+ 470:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __result;                      \
+ 471:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                                 \
+ 472:/usr/lib/avr/include/avr/pgmspace.h ****     (                                       \
+ 473:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 474:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %A0, r0"   "\n\t"              \
+ 475:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"   "\n\t"              \
+ 476:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 477:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %B0, r0"   "\n\t"              \
+ 478:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"   "\n\t"              \
+ 479:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 480:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %C0, r0"   "\n\t"              \
+ 481:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"   "\n\t"              \
+ 482:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 483:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %D0, r0"   "\n\t"              \
+ 484:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result), "=z" (__addr16)  \
+ 485:/usr/lib/avr/include/avr/pgmspace.h ****         : "1" (__addr16)                    \
+ 486:/usr/lib/avr/include/avr/pgmspace.h ****         : "r0"                              \
+ 487:/usr/lib/avr/include/avr/pgmspace.h ****     );                                      \
+ 488:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                               \
+ 489:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 490:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 491:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_dword_enhanced__(addr)        \
+ 492:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                            \
+ 493:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __addr16 = (uint16_t)(addr);   \
+ 494:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __result;                      \
+ 495:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                                 \
+ 496:/usr/lib/avr/include/avr/pgmspace.h ****     (                                       \
+ 497:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %A0, Z+"   "\n\t"              \
+ 498:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %B0, Z+"   "\n\t"              \
+ 499:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %C0, Z+"   "\n\t"              \
+ 500:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %D0, Z"    "\n\t"              \
+ 501:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result), "=z" (__addr16)  \
+ 502:/usr/lib/avr/include/avr/pgmspace.h ****         : "1" (__addr16)                    \
+ 503:/usr/lib/avr/include/avr/pgmspace.h ****     );                                      \
+ 504:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                               \
+ 505:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 506:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 507:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_float_classic__(addr)         \
+ 508:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                            \
+ 509:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __addr16 = (uint16_t)(addr);   \
+ 510:/usr/lib/avr/include/avr/pgmspace.h ****     float __result;                         \
+ 511:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                                 \
+ 512:/usr/lib/avr/include/avr/pgmspace.h ****     (                                       \
+ 513:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 514:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %A0, r0"   "\n\t"              \
+ 515:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"   "\n\t"              \
+ 516:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 517:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %B0, r0"   "\n\t"              \
+ 518:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"   "\n\t"              \
+ 519:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 520:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %C0, r0"   "\n\t"              \
+ 521:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"   "\n\t"              \
+ 522:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm"           "\n\t"              \
+ 523:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %D0, r0"   "\n\t"              \
+ 524:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result), "=z" (__addr16)  \
+ 525:/usr/lib/avr/include/avr/pgmspace.h ****         : "1" (__addr16)                    \
+ 526:/usr/lib/avr/include/avr/pgmspace.h ****         : "r0"                              \
+ 527:/usr/lib/avr/include/avr/pgmspace.h ****     );                                      \
+ 528:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                               \
+ 529:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 530:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 531:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_float_enhanced__(addr)        \
+ 532:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                            \
+ 533:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __addr16 = (uint16_t)(addr);   \
+ 534:/usr/lib/avr/include/avr/pgmspace.h ****     float __result;                         \
+ 535:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                                 \
+ 536:/usr/lib/avr/include/avr/pgmspace.h ****     (                                       \
+ 537:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %A0, Z+"   "\n\t"              \
+ 538:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %B0, Z+"   "\n\t"              \
+ 539:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %C0, Z+"   "\n\t"              \
+ 540:/usr/lib/avr/include/avr/pgmspace.h ****         "lpm %D0, Z"    "\n\t"              \
+ 541:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result), "=z" (__addr16)  \
+ 542:/usr/lib/avr/include/avr/pgmspace.h ****         : "1" (__addr16)                    \
+ 543:/usr/lib/avr/include/avr/pgmspace.h ****     );                                      \
+ 544:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                               \
+ 545:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 546:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 547:/usr/lib/avr/include/avr/pgmspace.h **** #if defined (__AVR_HAVE_LPMX__)
+ 548:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM(addr)         __LPM_enhanced__(addr)
+ 549:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_word(addr)    __LPM_word_enhanced__(addr)
+ 550:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_dword(addr)   __LPM_dword_enhanced__(addr)
+ 551:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_float(addr)   __LPM_float_enhanced__(addr)
+ 552:/usr/lib/avr/include/avr/pgmspace.h **** #else
+ 553:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM(addr)         __LPM_classic__(addr)
+ 554:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_word(addr)    __LPM_word_classic__(addr)
+ 555:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_dword(addr)   __LPM_dword_classic__(addr)
+ 556:/usr/lib/avr/include/avr/pgmspace.h **** #define __LPM_float(addr)   __LPM_float_classic__(addr)
+ 557:/usr/lib/avr/include/avr/pgmspace.h **** #endif
+ 558:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 559:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 560:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_byte_near(address_short)
+ 561:/usr/lib/avr/include/avr/pgmspace.h ****     Read a byte from the program space with a 16-bit (near) address. 
+ 562:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address.
+ 563:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 564:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 565:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_byte_near(address_short) __LPM((uint16_t)(address_short))
+ 566:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 567:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 568:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_word_near(address_short)
+ 569:/usr/lib/avr/include/avr/pgmspace.h ****     Read a word from the program space with a 16-bit (near) address. 
+ 570:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address. 
+ 571:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 572:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 573:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_word_near(address_short) __LPM_word((uint16_t)(address_short))
+ 574:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 575:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 576:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_dword_near(address_short)
+ 577:/usr/lib/avr/include/avr/pgmspace.h ****     Read a double word from the program space with a 16-bit (near) address. 
+ 578:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address. 
+ 579:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 580:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 581:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_dword_near(address_short) \
+ 582:/usr/lib/avr/include/avr/pgmspace.h ****     __LPM_dword((uint16_t)(address_short))
+ 583:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 584:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 585:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_float_near(address_short)
+ 586:/usr/lib/avr/include/avr/pgmspace.h ****     Read a float from the program space with a 16-bit (near) address. 
+ 587:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address. 
+ 588:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 589:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 590:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_float_near(address_short) \
+ 591:/usr/lib/avr/include/avr/pgmspace.h ****     __LPM_float((uint16_t)(address_short))
+ 592:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 593:/usr/lib/avr/include/avr/pgmspace.h **** #if defined(RAMPZ) || defined(__DOXYGEN__)
+ 594:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 595:/usr/lib/avr/include/avr/pgmspace.h **** /* Only for devices with more than 64K of program memory.
+ 596:/usr/lib/avr/include/avr/pgmspace.h ****    RAMPZ must be defined (see iom103.h, iom128.h).
+ 597:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 598:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 599:/usr/lib/avr/include/avr/pgmspace.h **** /* The classic functions are needed for ATmega103. */
+ 600:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 601:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_classic__(addr)      \
+ 602:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                    \
+ 603:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 604:/usr/lib/avr/include/avr/pgmspace.h ****     uint8_t __result;               \
+ 605:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                         \
+ 606:/usr/lib/avr/include/avr/pgmspace.h ****     (                               \
+ 607:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1" "\n\t"        \
+ 608:/usr/lib/avr/include/avr/pgmspace.h ****         "mov r31, %B1" "\n\t"       \
+ 609:/usr/lib/avr/include/avr/pgmspace.h ****         "mov r30, %A1" "\n\t"       \
+ 610:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm" "\n\t"               \
+ 611:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %0, r0" "\n\t"         \
+ 612:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)           \
+ 613:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),           \
+ 614:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ)) \
+ 615:/usr/lib/avr/include/avr/pgmspace.h ****         : "r0", "r30", "r31"        \
+ 616:/usr/lib/avr/include/avr/pgmspace.h ****     );                              \
+ 617:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                       \
+ 618:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 619:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 620:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_enhanced__(addr)     \
+ 621:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                    \
+ 622:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 623:/usr/lib/avr/include/avr/pgmspace.h ****     uint8_t __result;               \
+ 624:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                         \
+ 625:/usr/lib/avr/include/avr/pgmspace.h ****     (                               \
+ 626:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1" "\n\t"        \
+ 627:/usr/lib/avr/include/avr/pgmspace.h ****         "movw r30, %1" "\n\t"       \
+ 628:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %0, Z+" "\n\t"        \
+ 629:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)           \
+ 630:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),           \
+ 631:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ)) \
+ 632:/usr/lib/avr/include/avr/pgmspace.h ****         : "r30", "r31"              \
+ 633:/usr/lib/avr/include/avr/pgmspace.h ****     );                              \
+ 634:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                       \
+ 635:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 636:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 637:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_xmega__(addr)        \
+ 638:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                    \
+ 639:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 640:/usr/lib/avr/include/avr/pgmspace.h ****     uint8_t __result;               \
+ 641:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                         \
+ 642:/usr/lib/avr/include/avr/pgmspace.h ****     (                               \
+ 643:/usr/lib/avr/include/avr/pgmspace.h ****         "in __tmp_reg__, %2" "\n\t" \
+ 644:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1" "\n\t"        \
+ 645:/usr/lib/avr/include/avr/pgmspace.h ****         "movw r30, %1" "\n\t"       \
+ 646:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %0, Z+" "\n\t"        \
+ 647:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, __tmp_reg__"       \
+ 648:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)           \
+ 649:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),           \
+ 650:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ)) \
+ 651:/usr/lib/avr/include/avr/pgmspace.h ****         : "r30", "r31"              \
+ 652:/usr/lib/avr/include/avr/pgmspace.h ****     );                              \
+ 653:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                       \
+ 654:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 655:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 656:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_word_classic__(addr)     \
+ 657:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                        \
+ 658:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 659:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __result;                  \
+ 660:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                             \
+ 661:/usr/lib/avr/include/avr/pgmspace.h ****     (                                   \
+ 662:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1"   "\n\t"          \
+ 663:/usr/lib/avr/include/avr/pgmspace.h ****         "mov r31, %B1"  "\n\t"          \
+ 664:/usr/lib/avr/include/avr/pgmspace.h ****         "mov r30, %A1"  "\n\t"          \
+ 665:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"          "\n\t"          \
+ 666:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %A0, r0"   "\n\t"          \
+ 667:/usr/lib/avr/include/avr/pgmspace.h ****         "in r0, %2"     "\n\t"          \
+ 668:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"   "\n\t"          \
+ 669:/usr/lib/avr/include/avr/pgmspace.h ****         "adc r0, __zero_reg__" "\n\t"   \
+ 670:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, r0"    "\n\t"          \
+ 671:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"          "\n\t"          \
+ 672:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %B0, r0"   "\n\t"          \
+ 673:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)               \
+ 674:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),               \
+ 675:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ))     \
+ 676:/usr/lib/avr/include/avr/pgmspace.h ****         : "r0", "r30", "r31"            \
+ 677:/usr/lib/avr/include/avr/pgmspace.h ****     );                                  \
+ 678:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                           \
+ 679:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 680:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 681:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_word_enhanced__(addr)    \
+ 682:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                        \
+ 683:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 684:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __result;                  \
+ 685:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                             \
+ 686:/usr/lib/avr/include/avr/pgmspace.h ****     (                                   \
+ 687:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1"   "\n\t"          \
+ 688:/usr/lib/avr/include/avr/pgmspace.h ****         "movw r30, %1"  "\n\t"          \
+ 689:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %A0, Z+"  "\n\t"          \
+ 690:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %B0, Z"   "\n\t"          \
+ 691:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)               \
+ 692:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),               \
+ 693:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ))     \
+ 694:/usr/lib/avr/include/avr/pgmspace.h ****         : "r30", "r31"                  \
+ 695:/usr/lib/avr/include/avr/pgmspace.h ****     );                                  \
+ 696:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                           \
+ 697:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 698:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 699:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_word_xmega__(addr)       \
+ 700:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                        \
+ 701:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 702:/usr/lib/avr/include/avr/pgmspace.h ****     uint16_t __result;                  \
+ 703:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                             \
+ 704:/usr/lib/avr/include/avr/pgmspace.h ****     (                                   \
+ 705:/usr/lib/avr/include/avr/pgmspace.h ****         "in __tmp_reg__, %2" "\n\t"     \
+ 706:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1"   "\n\t"          \
+ 707:/usr/lib/avr/include/avr/pgmspace.h ****         "movw r30, %1"  "\n\t"          \
+ 708:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %A0, Z+"  "\n\t"          \
+ 709:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %B0, Z"   "\n\t"          \
+ 710:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, __tmp_reg__"           \
+ 711:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)               \
+ 712:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),               \
+ 713:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ))     \
+ 714:/usr/lib/avr/include/avr/pgmspace.h ****         : "r30", "r31"                  \
+ 715:/usr/lib/avr/include/avr/pgmspace.h ****     );                                  \
+ 716:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                           \
+ 717:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 718:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 719:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_dword_classic__(addr)      \
+ 720:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                          \
+ 721:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 722:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __result;                    \
+ 723:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                               \
+ 724:/usr/lib/avr/include/avr/pgmspace.h ****     (                                     \
+ 725:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1"          "\n\t"     \
+ 726:/usr/lib/avr/include/avr/pgmspace.h ****         "mov r31, %B1"         "\n\t"     \
+ 727:/usr/lib/avr/include/avr/pgmspace.h ****         "mov r30, %A1"         "\n\t"     \
+ 728:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"                 "\n\t"     \
+ 729:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %A0, r0"          "\n\t"     \
+ 730:/usr/lib/avr/include/avr/pgmspace.h ****         "in r0, %2"            "\n\t"     \
+ 731:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"          "\n\t"     \
+ 732:/usr/lib/avr/include/avr/pgmspace.h ****         "adc r0, __zero_reg__" "\n\t"     \
+ 733:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, r0"           "\n\t"     \
+ 734:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"                 "\n\t"     \
+ 735:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %B0, r0"          "\n\t"     \
+ 736:/usr/lib/avr/include/avr/pgmspace.h ****         "in r0, %2"            "\n\t"     \
+ 737:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"          "\n\t"     \
+ 738:/usr/lib/avr/include/avr/pgmspace.h ****         "adc r0, __zero_reg__" "\n\t"     \
+ 739:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, r0"           "\n\t"     \
+ 740:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"                 "\n\t"     \
+ 741:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %C0, r0"          "\n\t"     \
+ 742:/usr/lib/avr/include/avr/pgmspace.h ****         "in r0, %2"            "\n\t"     \
+ 743:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"          "\n\t"     \
+ 744:/usr/lib/avr/include/avr/pgmspace.h ****         "adc r0, __zero_reg__" "\n\t"     \
+ 745:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, r0"           "\n\t"     \
+ 746:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"                 "\n\t"     \
+ 747:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %D0, r0"          "\n\t"     \
+ 748:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)                 \
+ 749:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),                 \
+ 750:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ))       \
+ 751:/usr/lib/avr/include/avr/pgmspace.h ****         : "r0", "r30", "r31"              \
+ 752:/usr/lib/avr/include/avr/pgmspace.h ****     );                                    \
+ 753:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                             \
+ 754:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 755:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 756:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_dword_enhanced__(addr)     \
+ 757:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                          \
+ 758:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 759:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __result;                    \
+ 760:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                               \
+ 761:/usr/lib/avr/include/avr/pgmspace.h ****     (                                     \
+ 762:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1"   "\n\t"            \
+ 763:/usr/lib/avr/include/avr/pgmspace.h ****         "movw r30, %1"  "\n\t"            \
+ 764:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %A0, Z+"  "\n\t"            \
+ 765:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %B0, Z+"  "\n\t"            \
+ 766:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %C0, Z+"  "\n\t"            \
+ 767:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %D0, Z"   "\n\t"            \
+ 768:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)                 \
+ 769:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),                 \
+ 770:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ))       \
+ 771:/usr/lib/avr/include/avr/pgmspace.h ****         : "r30", "r31"                    \
+ 772:/usr/lib/avr/include/avr/pgmspace.h ****     );                                    \
+ 773:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                             \
+ 774:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 775:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 776:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_dword_xmega__(addr)        \
+ 777:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                          \
+ 778:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 779:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __result;                    \
+ 780:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                               \
+ 781:/usr/lib/avr/include/avr/pgmspace.h ****     (                                     \
+ 782:/usr/lib/avr/include/avr/pgmspace.h ****         "in __tmp_reg__, %2" "\n\t"       \
+ 783:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1"   "\n\t"            \
+ 784:/usr/lib/avr/include/avr/pgmspace.h ****         "movw r30, %1"  "\n\t"            \
+ 785:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %A0, Z+"  "\n\t"            \
+ 786:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %B0, Z+"  "\n\t"            \
+ 787:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %C0, Z+"  "\n\t"            \
+ 788:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %D0, Z"   "\n\t"            \
+ 789:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, __tmp_reg__"             \
+ 790:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)                 \
+ 791:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),                 \
+ 792:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ))       \
+ 793:/usr/lib/avr/include/avr/pgmspace.h ****         : "r30", "r31"                    \
+ 794:/usr/lib/avr/include/avr/pgmspace.h ****     );                                    \
+ 795:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                             \
+ 796:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 797:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 798:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_float_classic__(addr)      \
+ 799:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                          \
+ 800:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 801:/usr/lib/avr/include/avr/pgmspace.h ****     float __result;                       \
+ 802:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                               \
+ 803:/usr/lib/avr/include/avr/pgmspace.h ****     (                                     \
+ 804:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1"          "\n\t"     \
+ 805:/usr/lib/avr/include/avr/pgmspace.h ****         "mov r31, %B1"         "\n\t"     \
+ 806:/usr/lib/avr/include/avr/pgmspace.h ****         "mov r30, %A1"         "\n\t"     \
+ 807:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"                 "\n\t"     \
+ 808:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %A0, r0"          "\n\t"     \
+ 809:/usr/lib/avr/include/avr/pgmspace.h ****         "in r0, %2"            "\n\t"     \
+ 810:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"          "\n\t"     \
+ 811:/usr/lib/avr/include/avr/pgmspace.h ****         "adc r0, __zero_reg__" "\n\t"     \
+ 812:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, r0"           "\n\t"     \
+ 813:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"                 "\n\t"     \
+ 814:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %B0, r0"          "\n\t"     \
+ 815:/usr/lib/avr/include/avr/pgmspace.h ****         "in r0, %2"            "\n\t"     \
+ 816:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"          "\n\t"     \
+ 817:/usr/lib/avr/include/avr/pgmspace.h ****         "adc r0, __zero_reg__" "\n\t"     \
+ 818:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, r0"           "\n\t"     \
+ 819:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"                 "\n\t"     \
+ 820:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %C0, r0"          "\n\t"     \
+ 821:/usr/lib/avr/include/avr/pgmspace.h ****         "in r0, %2"            "\n\t"     \
+ 822:/usr/lib/avr/include/avr/pgmspace.h ****         "adiw r30, 1"          "\n\t"     \
+ 823:/usr/lib/avr/include/avr/pgmspace.h ****         "adc r0, __zero_reg__" "\n\t"     \
+ 824:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, r0"           "\n\t"     \
+ 825:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm"                 "\n\t"     \
+ 826:/usr/lib/avr/include/avr/pgmspace.h ****         "mov %D0, r0"          "\n\t"     \
+ 827:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)                 \
+ 828:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),                 \
+ 829:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ))       \
+ 830:/usr/lib/avr/include/avr/pgmspace.h ****         : "r0", "r30", "r31"              \
+ 831:/usr/lib/avr/include/avr/pgmspace.h ****     );                                    \
+ 832:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                             \
+ 833:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 834:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 835:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_float_enhanced__(addr)     \
+ 836:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                          \
+ 837:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 838:/usr/lib/avr/include/avr/pgmspace.h ****     float __result;                       \
+ 839:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                               \
+ 840:/usr/lib/avr/include/avr/pgmspace.h ****     (                                     \
+ 841:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1"   "\n\t"            \
+ 842:/usr/lib/avr/include/avr/pgmspace.h ****         "movw r30, %1"  "\n\t"            \
+ 843:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %A0, Z+"  "\n\t"            \
+ 844:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %B0, Z+"  "\n\t"            \
+ 845:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %C0, Z+"  "\n\t"            \
+ 846:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %D0, Z"   "\n\t"            \
+ 847:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)                 \
+ 848:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),                 \
+ 849:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ))       \
+ 850:/usr/lib/avr/include/avr/pgmspace.h ****         : "r30", "r31"                    \
+ 851:/usr/lib/avr/include/avr/pgmspace.h ****     );                                    \
+ 852:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                             \
+ 853:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 854:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 855:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_float_xmega__(addr)        \
+ 856:/usr/lib/avr/include/avr/pgmspace.h **** (__extension__({                          \
+ 857:/usr/lib/avr/include/avr/pgmspace.h ****     uint32_t __addr32 = (uint32_t)(addr); \
+ 858:/usr/lib/avr/include/avr/pgmspace.h ****     float __result;                       \
+ 859:/usr/lib/avr/include/avr/pgmspace.h ****     __asm__                               \
+ 860:/usr/lib/avr/include/avr/pgmspace.h ****     (                                     \
+ 861:/usr/lib/avr/include/avr/pgmspace.h ****         "in __tmp_reg__, %2" "\n\t"       \
+ 862:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, %C1"   "\n\t"            \
+ 863:/usr/lib/avr/include/avr/pgmspace.h ****         "movw r30, %1"  "\n\t"            \
+ 864:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %A0, Z+"  "\n\t"            \
+ 865:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %B0, Z+"  "\n\t"            \
+ 866:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %C0, Z+"  "\n\t"            \
+ 867:/usr/lib/avr/include/avr/pgmspace.h ****         "elpm %D0, Z"   "\n\t"            \
+ 868:/usr/lib/avr/include/avr/pgmspace.h ****         "out %2, __tmp_reg__"             \
+ 869:/usr/lib/avr/include/avr/pgmspace.h ****         : "=r" (__result)                 \
+ 870:/usr/lib/avr/include/avr/pgmspace.h ****         : "r" (__addr32),                 \
+ 871:/usr/lib/avr/include/avr/pgmspace.h ****           "I" (_SFR_IO_ADDR(RAMPZ))       \
+ 872:/usr/lib/avr/include/avr/pgmspace.h ****         : "r30", "r31"                    \
+ 873:/usr/lib/avr/include/avr/pgmspace.h ****     );                                    \
+ 874:/usr/lib/avr/include/avr/pgmspace.h ****     __result;                             \
+ 875:/usr/lib/avr/include/avr/pgmspace.h **** }))
+ 876:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 877:/usr/lib/avr/include/avr/pgmspace.h **** /* 
+ 878:/usr/lib/avr/include/avr/pgmspace.h **** Check for architectures that implement RAMPD (avrxmega3, avrxmega5, 
+ 879:/usr/lib/avr/include/avr/pgmspace.h **** avrxmega7) as they need to save/restore RAMPZ for ELPM macros so it does
+ 880:/usr/lib/avr/include/avr/pgmspace.h **** not interfere with data accesses. 
+ 881:/usr/lib/avr/include/avr/pgmspace.h **** */
+ 882:/usr/lib/avr/include/avr/pgmspace.h **** #if defined (__AVR_HAVE_RAMPD__)
+ 883:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 884:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM(addr)        __ELPM_xmega__(addr)
+ 885:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_word(addr)   __ELPM_word_xmega__(addr)
+ 886:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_dword(addr)  __ELPM_dword_xmega__(addr)
+ 887:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_float(addr)  __ELPM_float_xmega__(addr)
+ 888:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 889:/usr/lib/avr/include/avr/pgmspace.h **** #else
+ 890:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 891:/usr/lib/avr/include/avr/pgmspace.h **** #if defined (__AVR_HAVE_LPMX__)
+ 892:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 893:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM(addr)        __ELPM_enhanced__(addr)
+ 894:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_word(addr)   __ELPM_word_enhanced__(addr)
+ 895:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_dword(addr)  __ELPM_dword_enhanced__(addr)
+ 896:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_float(addr)  __ELPM_float_enhanced__(addr)
+ 897:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 898:/usr/lib/avr/include/avr/pgmspace.h **** #else
+ 899:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 900:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM(addr)        __ELPM_classic__(addr)
+ 901:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_word(addr)   __ELPM_word_classic__(addr)
+ 902:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_dword(addr)  __ELPM_dword_classic__(addr)
+ 903:/usr/lib/avr/include/avr/pgmspace.h **** #define __ELPM_float(addr)  __ELPM_float_classic__(addr)
+ 904:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 905:/usr/lib/avr/include/avr/pgmspace.h **** #endif  /* __AVR_HAVE_LPMX__ */
+ 906:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 907:/usr/lib/avr/include/avr/pgmspace.h **** #endif  /* __AVR_HAVE_RAMPD__ */
+ 908:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 909:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 910:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 911:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_byte_far(address_long)
+ 912:/usr/lib/avr/include/avr/pgmspace.h ****     Read a byte from the program space with a 32-bit (far) address. 
+ 913:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 914:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address. 
+ 915:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 916:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 917:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_byte_far(address_long)  __ELPM((uint32_t)(address_long))
+ 918:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 919:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 920:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_word_far(address_long)
+ 921:/usr/lib/avr/include/avr/pgmspace.h ****     Read a word from the program space with a 32-bit (far) address. 
+ 922:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 923:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address.
+ 924:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 925:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 926:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_word_far(address_long)  __ELPM_word((uint32_t)(address_long))
+ 927:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 928:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 929:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_dword_far(address_long)
+ 930:/usr/lib/avr/include/avr/pgmspace.h ****     Read a double word from the program space with a 32-bit (far) address. 
+ 931:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 932:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address.
+ 933:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 934:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 935:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_dword_far(address_long) __ELPM_dword((uint32_t)(address_long))
+ 936:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 937:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 938:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_float_far(address_long)
+ 939:/usr/lib/avr/include/avr/pgmspace.h ****     Read a float from the program space with a 32-bit (far) address. 
+ 940:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 941:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address.
+ 942:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 943:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 944:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_float_far(address_long) __ELPM_float((uint32_t)(address_long))
+ 945:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 946:/usr/lib/avr/include/avr/pgmspace.h **** #endif /* RAMPZ or __DOXYGEN__ */
+ 947:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 948:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 949:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_byte(address_short)
+ 950:/usr/lib/avr/include/avr/pgmspace.h ****     Read a byte from the program space with a 16-bit (near) address. 
+ 951:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 952:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address. 
+ 953:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 954:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 955:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_byte(address_short)    pgm_read_byte_near(address_short)
+ 956:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 957:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 958:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_word(address_short)
+ 959:/usr/lib/avr/include/avr/pgmspace.h ****     Read a word from the program space with a 16-bit (near) address. 
+ 960:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 961:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address. 
+ 962:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 963:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 964:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_word(address_short)    pgm_read_word_near(address_short)
+ 965:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 966:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 967:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_dword(address_short)
+ 968:/usr/lib/avr/include/avr/pgmspace.h ****     Read a double word from the program space with a 16-bit (near) address. 
+ 969:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 970:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address. 
+ 971:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 972:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 973:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_dword(address_short)   pgm_read_dword_near(address_short)
+ 974:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 975:/usr/lib/avr/include/avr/pgmspace.h **** /** \ingroup avr_pgmspace
+ 976:/usr/lib/avr/include/avr/pgmspace.h ****     \def pgm_read_float(address_short)
+ 977:/usr/lib/avr/include/avr/pgmspace.h ****     Read a float from the program space with a 16-bit (near) address. 
+ 978:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 979:/usr/lib/avr/include/avr/pgmspace.h ****     \note The address is a byte address. 
+ 980:/usr/lib/avr/include/avr/pgmspace.h ****     The address is in the program space. */
+ 981:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 982:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_read_float(address_short)   pgm_read_float_near(address_short)
+ 983:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 984:/usr/lib/avr/include/avr/pgmspace.h **** /* pgm_get_far_address() macro
+ 985:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 986:/usr/lib/avr/include/avr/pgmspace.h ****    This macro facilitates the obtention of a 32 bit "far" pointer (only 24 bits
+ 987:/usr/lib/avr/include/avr/pgmspace.h ****    used) to data even passed the 64KB limit for the 16 bit ordinary pointer. It
+ 988:/usr/lib/avr/include/avr/pgmspace.h ****    is similar to the '&' operator, with some limitations.
+ 989:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 990:/usr/lib/avr/include/avr/pgmspace.h ****    Comments:
+ 991:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 992:/usr/lib/avr/include/avr/pgmspace.h ****    - The overhead is minimal and it's mainly due to the 32 bit size operation.
+ 993:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 994:/usr/lib/avr/include/avr/pgmspace.h ****    - 24 bit sizes guarantees the code compatibility for use in future devices.
+ 995:/usr/lib/avr/include/avr/pgmspace.h **** 
+ 996:/usr/lib/avr/include/avr/pgmspace.h ****    - hh8() is an undocumented feature but seems to give the third significant byte
+ 997:/usr/lib/avr/include/avr/pgmspace.h ****      of a 32 bit data and accepts symbols, complementing the functionality of hi8()
+ 998:/usr/lib/avr/include/avr/pgmspace.h ****      and lo8(). There is not an equivalent assembler function to get the high
+ 999:/usr/lib/avr/include/avr/pgmspace.h ****      significant byte.
+1000:/usr/lib/avr/include/avr/pgmspace.h **** 
+1001:/usr/lib/avr/include/avr/pgmspace.h ****    - 'var' has to be resolved at linking time as an existing symbol, i.e, a simple
+1002:/usr/lib/avr/include/avr/pgmspace.h ****      type variable name, an array name (not an indexed element of the array, if the
+1003:/usr/lib/avr/include/avr/pgmspace.h ****      index is a constant the compiler does not complain but fails to get the address
+1004:/usr/lib/avr/include/avr/pgmspace.h ****      if optimization is enabled), a struct name or a struct field name, a function
+1005:/usr/lib/avr/include/avr/pgmspace.h ****      identifier, a linker defined identifier,...
+1006:/usr/lib/avr/include/avr/pgmspace.h **** 
+1007:/usr/lib/avr/include/avr/pgmspace.h ****    - The returned value is the identifier's VMA (virtual memory address) determined
+1008:/usr/lib/avr/include/avr/pgmspace.h ****      by the linker and falls in the corresponding memory region. The AVR Harvard
+1009:/usr/lib/avr/include/avr/pgmspace.h ****      architecture requires non overlapping VMA areas for the multiple address spaces
+1010:/usr/lib/avr/include/avr/pgmspace.h ****      in the processor: Flash ROM, RAM, and EEPROM. Typical offset for this are
+1011:/usr/lib/avr/include/avr/pgmspace.h ****      0x00000000, 0x00800xx0, and 0x00810000 respectively, derived from the linker
+1012:/usr/lib/avr/include/avr/pgmspace.h **** 	 script used and linker options. The value returned can be seen then as a
+1013:/usr/lib/avr/include/avr/pgmspace.h ****      universal pointer.
+1014:/usr/lib/avr/include/avr/pgmspace.h **** 
+1015:/usr/lib/avr/include/avr/pgmspace.h **** */
+1016:/usr/lib/avr/include/avr/pgmspace.h **** 
+1017:/usr/lib/avr/include/avr/pgmspace.h **** #define pgm_get_far_address(var)                          \
+1018:/usr/lib/avr/include/avr/pgmspace.h **** ({                                                    \
+1019:/usr/lib/avr/include/avr/pgmspace.h **** 	uint_farptr_t tmp;                                \
+1020:/usr/lib/avr/include/avr/pgmspace.h ****                                                       \
+1021:/usr/lib/avr/include/avr/pgmspace.h **** 	__asm__ __volatile__(                             \
+1022:/usr/lib/avr/include/avr/pgmspace.h ****                                                       \
+1023:/usr/lib/avr/include/avr/pgmspace.h **** 			"ldi	%A0, lo8(%1)"           "\n\t"    \
+1024:/usr/lib/avr/include/avr/pgmspace.h **** 			"ldi	%B0, hi8(%1)"           "\n\t"    \
+1025:/usr/lib/avr/include/avr/pgmspace.h **** 			"ldi	%C0, hh8(%1)"           "\n\t"    \
+1026:/usr/lib/avr/include/avr/pgmspace.h **** 			"clr	%D0"                    "\n\t"    \
+1027:/usr/lib/avr/include/avr/pgmspace.h **** 		:                                             \
+1028:/usr/lib/avr/include/avr/pgmspace.h **** 			"=d" (tmp)                                \
+1029:/usr/lib/avr/include/avr/pgmspace.h **** 		:                                             \
+1030:/usr/lib/avr/include/avr/pgmspace.h **** 			"p"  (&(var))                             \
+1031:/usr/lib/avr/include/avr/pgmspace.h **** 	);                                                \
+1032:/usr/lib/avr/include/avr/pgmspace.h **** 	tmp;                                              \
+1033:/usr/lib/avr/include/avr/pgmspace.h **** })
+1034:/usr/lib/avr/include/avr/pgmspace.h **** 
+1035:/usr/lib/avr/include/avr/pgmspace.h **** 
+1036:/usr/lib/avr/include/avr/pgmspace.h **** 
+1037:/usr/lib/avr/include/avr/pgmspace.h **** extern const void * memchr_P(const void *, int __val, size_t __len) __ATTR_CONST__;
+1038:/usr/lib/avr/include/avr/pgmspace.h **** extern int memcmp_P(const void *, const void *, size_t) __ATTR_PURE__;
+1039:/usr/lib/avr/include/avr/pgmspace.h **** extern void *memccpy_P(void *, const void *, int __val, size_t);
+1040:/usr/lib/avr/include/avr/pgmspace.h **** extern void *memcpy_P(void *, const void *, size_t);
+1041:/usr/lib/avr/include/avr/pgmspace.h **** extern void *memmem_P(const void *, size_t, const void *, size_t) __ATTR_PURE__;
+1042:/usr/lib/avr/include/avr/pgmspace.h **** extern const void * memrchr_P(const void *, int __val, size_t __len) __ATTR_CONST__;
+1043:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strcat_P(char *, const char *);
+1044:/usr/lib/avr/include/avr/pgmspace.h **** extern const char * strchr_P(const char *, int __val) __ATTR_CONST__;
+1045:/usr/lib/avr/include/avr/pgmspace.h **** extern const char * strchrnul_P(const char *, int __val) __ATTR_CONST__;
+1046:/usr/lib/avr/include/avr/pgmspace.h **** extern int strcmp_P(const char *, const char *) __ATTR_PURE__;
+1047:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strcpy_P(char *, const char *);
+1048:/usr/lib/avr/include/avr/pgmspace.h **** extern int strcasecmp_P(const char *, const char *) __ATTR_PURE__;
+1049:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strcasestr_P(const char *, const char *) __ATTR_PURE__;
+1050:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t strcspn_P(const char *__s, const char * __reject) __ATTR_PURE__;
+1051:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t strlcat_P (char *, const char *, size_t );
+1052:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t strlcpy_P (char *, const char *, size_t );
+1053:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t __strlen_P(const char *) __ATTR_CONST__;  /* program memory can't change */
+1054:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t strnlen_P(const char *, size_t) __ATTR_CONST__; /* program memory can't change */
+1055:/usr/lib/avr/include/avr/pgmspace.h **** extern int strncmp_P(const char *, const char *, size_t) __ATTR_PURE__;
+1056:/usr/lib/avr/include/avr/pgmspace.h **** extern int strncasecmp_P(const char *, const char *, size_t) __ATTR_PURE__;
+1057:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strncat_P(char *, const char *, size_t);
+1058:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strncpy_P(char *, const char *, size_t);
+1059:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strpbrk_P(const char *__s, const char * __accept) __ATTR_PURE__;
+1060:/usr/lib/avr/include/avr/pgmspace.h **** extern const char * strrchr_P(const char *, int __val) __ATTR_CONST__;
+1061:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strsep_P(char **__sp, const char * __delim);
+1062:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t strspn_P(const char *__s, const char * __accept) __ATTR_PURE__;
+1063:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strstr_P(const char *, const char *) __ATTR_PURE__;
+1064:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strtok_P(char *__s, const char * __delim);
+1065:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strtok_rP(char *__s, const char * __delim, char **__last);
+1066:/usr/lib/avr/include/avr/pgmspace.h **** 
+1067:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t strlen_PF (uint_farptr_t src) __ATTR_CONST__; /* program memory can't change */
+1068:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t strnlen_PF (uint_farptr_t src, size_t len) __ATTR_CONST__; /* program memory can't ch
+1069:/usr/lib/avr/include/avr/pgmspace.h **** extern void *memcpy_PF (void *dest, uint_farptr_t src, size_t len);
+1070:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strcpy_PF (char *dest, uint_farptr_t src);
+1071:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strncpy_PF (char *dest, uint_farptr_t src, size_t len);
+1072:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strcat_PF (char *dest, uint_farptr_t src);
+1073:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t strlcat_PF (char *dst, uint_farptr_t src, size_t siz);
+1074:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strncat_PF (char *dest, uint_farptr_t src, size_t len);
+1075:/usr/lib/avr/include/avr/pgmspace.h **** extern int strcmp_PF (const char *s1, uint_farptr_t s2) __ATTR_PURE__;
+1076:/usr/lib/avr/include/avr/pgmspace.h **** extern int strncmp_PF (const char *s1, uint_farptr_t s2, size_t n) __ATTR_PURE__;
+1077:/usr/lib/avr/include/avr/pgmspace.h **** extern int strcasecmp_PF (const char *s1, uint_farptr_t s2) __ATTR_PURE__;
+1078:/usr/lib/avr/include/avr/pgmspace.h **** extern int strncasecmp_PF (const char *s1, uint_farptr_t s2, size_t n) __ATTR_PURE__;
+1079:/usr/lib/avr/include/avr/pgmspace.h **** extern char *strstr_PF (const char *s1, uint_farptr_t s2);
+1080:/usr/lib/avr/include/avr/pgmspace.h **** extern size_t strlcpy_PF (char *dst, uint_farptr_t src, size_t siz);
+1081:/usr/lib/avr/include/avr/pgmspace.h **** extern int memcmp_PF(const void *, uint_farptr_t, size_t) __ATTR_PURE__;
+1082:/usr/lib/avr/include/avr/pgmspace.h **** 
+1083:/usr/lib/avr/include/avr/pgmspace.h **** 
+1084:/usr/lib/avr/include/avr/pgmspace.h **** __attribute__((__always_inline__)) static inline size_t strlen_P(const char * s);
+1085:/usr/lib/avr/include/avr/pgmspace.h **** static inline size_t strlen_P(const char *s) {
+1086:/usr/lib/avr/include/avr/pgmspace.h ****   return __builtin_constant_p(__builtin_strlen(s))
+1087:/usr/lib/avr/include/avr/pgmspace.h ****      ? __builtin_strlen(s) : __strlen_P(s);
+ 220               		.loc 2 1087 0
+ 221 009a CB01      		movw r24,r22
+ 222               	.LVL17:
+ 223 009c 0E94 0000 		call __strlen_P
+ 224               	.LVL18:
+ 225 00a0 8C01      		movw r16,r24
+ 226 00a2 A12C      		mov r10,__zero_reg__
+ 227 00a4 B12C      		mov r11,__zero_reg__
+ 228               	.LVL19:
+ 229               	.L8:
+ 230               	.LBE18:
+ 231               	.LBE17:
+  93:Lib/Print.cpp **** 	while (len > 0) {
+ 232               		.loc 1 93 0 discriminator 1
+ 233 00a6 0115      		cp r16,__zero_reg__
+ 234 00a8 1105      		cpc r17,__zero_reg__
+ 235 00aa 01F0      		breq .L11
+ 236               	.LVL20:
+ 237 00ac 7801      		movw r14,r16
+ 238 00ae 0132      		cpi r16,33
+ 239 00b0 1105      		cpc r17,__zero_reg__
+ 240 00b2 00F0      		brlo .L9
+ 241 00b4 80E2      		ldi r24,lo8(32)
+ 242 00b6 E82E      		mov r14,r24
+ 243 00b8 F12C      		mov r15,__zero_reg__
+ 244               	.L9:
+ 245               	.LVL21:
+ 246               	.LBB19:
+  96:Lib/Print.cpp **** 		memcpy_P(buffer, p, nbytes);
+ 247               		.loc 1 96 0
+ 248 00ba A701      		movw r20,r14
+ 249 00bc B601      		movw r22,r12
+ 250 00be CE01      		movw r24,r28
+ 251 00c0 0196      		adiw r24,1
+ 252 00c2 0E94 0000 		call memcpy_P
+ 253               	.LVL22:
+  97:Lib/Print.cpp **** 		p += nbytes;
+ 254               		.loc 1 97 0
+ 255 00c6 CE0C      		add r12,r14
+ 256 00c8 DF1C      		adc r13,r15
+ 257               	.LVL23:
+  98:Lib/Print.cpp **** 		len -= nbytes;
+ 258               		.loc 1 98 0
+ 259 00ca 0E19      		sub r16,r14
+ 260 00cc 1F09      		sbc r17,r15
+ 261               	.LVL24:
+  99:Lib/Print.cpp **** 		count += write(buffer, nbytes);
+ 262               		.loc 1 99 0
+ 263 00ce D401      		movw r26,r8
+ 264 00d0 ED91      		ld r30,X+
+ 265 00d2 FC91      		ld r31,X
+ 266 00d4 0280      		ldd __tmp_reg__,Z+2
+ 267 00d6 F381      		ldd r31,Z+3
+ 268 00d8 E02D      		mov r30,__tmp_reg__
+ 269 00da A701      		movw r20,r14
+ 270 00dc BE01      		movw r22,r28
+ 271 00de 6F5F      		subi r22,-1
+ 272 00e0 7F4F      		sbci r23,-1
+ 273 00e2 C401      		movw r24,r8
+ 274 00e4 0995      		icall
+ 275               	.LVL25:
+ 276 00e6 A80E      		add r10,r24
+ 277 00e8 B91E      		adc r11,r25
+ 278               	.LVL26:
+ 279 00ea 00C0      		rjmp .L8
+ 280               	.LVL27:
+ 281               	.L11:
+ 282               	.LBE19:
+ 283               	.LBE16:
+ 102:Lib/Print.cpp **** }
+ 284               		.loc 1 102 0
+ 285 00ec C501      		movw r24,r10
+ 286               	/* epilogue start */
+ 287 00ee A096      		adiw r28,32
+ 288 00f0 0FB6      		in __tmp_reg__,__SREG__
+ 289 00f2 F894      		cli
+ 290 00f4 DEBF      		out __SP_H__,r29
+ 291 00f6 0FBE      		out __SREG__,__tmp_reg__
+ 292 00f8 CDBF      		out __SP_L__,r28
+ 293 00fa DF91      		pop r29
+ 294 00fc CF91      		pop r28
+ 295 00fe 1F91      		pop r17
+ 296 0100 0F91      		pop r16
+ 297               	.LVL28:
+ 298 0102 FF90      		pop r15
+ 299 0104 EF90      		pop r14
+ 300 0106 DF90      		pop r13
+ 301 0108 CF90      		pop r12
+ 302               	.LVL29:
+ 303 010a BF90      		pop r11
+ 304 010c AF90      		pop r10
+ 305               	.LVL30:
+ 306 010e 9F90      		pop r9
+ 307 0110 8F90      		pop r8
+ 308               	.LVL31:
+ 309 0112 0895      		ret
+ 310               		.cfi_endproc
+ 311               	.LFE52:
+ 313               	.global	_ZN5Print7printlnEv
+ 315               	_ZN5Print7printlnEv:
+ 316               	.LFB54:
+ 143:Lib/Print.cpp **** {
+ 317               		.loc 1 143 0
+ 318               		.cfi_startproc
+ 319               	.LVL32:
+ 320 0114 CF93      		push r28
+ 321               	.LCFI22:
+ 322               		.cfi_def_cfa_offset 3
+ 323               		.cfi_offset 28, -2
+ 324 0116 DF93      		push r29
+ 325               	.LCFI23:
+ 326               		.cfi_def_cfa_offset 4
+ 327               		.cfi_offset 29, -3
+ 328 0118 00D0      		rcall .
+ 329               	.LCFI24:
+ 330               		.cfi_def_cfa_offset 6
+ 331 011a CDB7      		in r28,__SP_L__
+ 332 011c DEB7      		in r29,__SP_H__
+ 333               	.LCFI25:
+ 334               		.cfi_def_cfa_register 28
+ 335               	/* prologue: function */
+ 336               	/* frame size = 2 */
+ 337               	/* stack size = 4 */
+ 338               	.L__stack_usage = 4
+ 339               	.LBB20:
+ 144:Lib/Print.cpp **** 	uint8_t buf[2]={'\r', '\n'};
+ 340               		.loc 1 144 0
+ 341 011e 2DE0      		ldi r18,lo8(13)
+ 342 0120 2983      		std Y+1,r18
+ 343 0122 2AE0      		ldi r18,lo8(10)
+ 344 0124 2A83      		std Y+2,r18
+ 145:Lib/Print.cpp **** 	return write(buf, 2);
+ 345               		.loc 1 145 0
+ 346 0126 DC01      		movw r26,r24
+ 347 0128 ED91      		ld r30,X+
+ 348 012a FC91      		ld r31,X
+ 349 012c 0280      		ldd __tmp_reg__,Z+2
+ 350 012e F381      		ldd r31,Z+3
+ 351 0130 E02D      		mov r30,__tmp_reg__
+ 352 0132 42E0      		ldi r20,lo8(2)
+ 353 0134 50E0      		ldi r21,0
+ 354 0136 BE01      		movw r22,r28
+ 355 0138 6F5F      		subi r22,-1
+ 356 013a 7F4F      		sbci r23,-1
+ 357 013c 0995      		icall
+ 358               	.LVL33:
+ 359               	/* epilogue start */
+ 360               	.LBE20:
+ 146:Lib/Print.cpp **** }
+ 361               		.loc 1 146 0
+ 362 013e 0F90      		pop __tmp_reg__
+ 363 0140 0F90      		pop __tmp_reg__
+ 364 0142 DF91      		pop r29
+ 365 0144 CF91      		pop r28
+ 366 0146 0895      		ret
+ 367               		.cfi_endproc
+ 368               	.LFE54:
+ 370               	.global	_ZN5Print6printfEPKcz
+ 372               	_ZN5Print6printfEPKcz:
+ 373               	.LFB56:
+ 162:Lib/Print.cpp **** 
+ 163:Lib/Print.cpp **** int Print::printf(const char *format, ...)
+ 164:Lib/Print.cpp **** {
+ 374               		.loc 1 164 0
+ 375               		.cfi_startproc
+ 376               	.LVL34:
+ 377 0148 CF93      		push r28
+ 378               	.LCFI26:
+ 379               		.cfi_def_cfa_offset 3
+ 380               		.cfi_offset 28, -2
+ 381 014a DF93      		push r29
+ 382               	.LCFI27:
+ 383               		.cfi_def_cfa_offset 4
+ 384               		.cfi_offset 29, -3
+ 385 014c CDB7      		in r28,__SP_L__
+ 386 014e DEB7      		in r29,__SP_H__
+ 387               	.LCFI28:
+ 388               		.cfi_def_cfa_register 28
+ 389 0150 2E97      		sbiw r28,14
+ 390               	.LCFI29:
+ 391               		.cfi_def_cfa_offset 18
+ 392 0152 0FB6      		in __tmp_reg__,__SREG__
+ 393 0154 F894      		cli
+ 394 0156 DEBF      		out __SP_H__,r29
+ 395 0158 0FBE      		out __SREG__,__tmp_reg__
+ 396 015a CDBF      		out __SP_L__,r28
+ 397               	/* prologue: function */
+ 398               	/* frame size = 14 */
+ 399               	/* stack size = 16 */
+ 400               	.L__stack_usage = 16
+ 401               	.LBB21:
+ 165:Lib/Print.cpp **** 	FILE f;
+ 166:Lib/Print.cpp **** 	va_list ap;
+ 167:Lib/Print.cpp **** 
+ 168:Lib/Print.cpp **** 	fdev_setup_stream(&f, printf_putchar, NULL, _FDEV_SETUP_WRITE);
+ 402               		.loc 1 168 0
+ 403 015c 80E0      		ldi r24,lo8(gs(_ZL14printf_putcharcP6__file))
+ 404 015e 90E0      		ldi r25,hi8(gs(_ZL14printf_putcharcP6__file))
+ 405 0160 9A87      		std Y+10,r25
+ 406 0162 8987      		std Y+9,r24
+ 407 0164 1C86      		std Y+12,__zero_reg__
+ 408 0166 1B86      		std Y+11,__zero_reg__
+ 409 0168 82E0      		ldi r24,lo8(2)
+ 410 016a 8C83      		std Y+4,r24
+ 169:Lib/Print.cpp **** 	fdev_set_udata(&f, this);
+ 411               		.loc 1 169 0
+ 412 016c 8B89      		ldd r24,Y+19
+ 413 016e 9C89      		ldd r25,Y+20
+ 414 0170 9E87      		std Y+14,r25
+ 415 0172 8D87      		std Y+13,r24
+ 416               	.LVL35:
+ 170:Lib/Print.cpp **** 	va_start(ap, format);
+ 171:Lib/Print.cpp **** 	return vfprintf(&f, format, ap);
+ 417               		.loc 1 171 0
+ 418 0174 AE01      		movw r20,r28
+ 419 0176 495E      		subi r20,-23
+ 420 0178 5F4F      		sbci r21,-1
+ 421 017a 6D89      		ldd r22,Y+21
+ 422 017c 7E89      		ldd r23,Y+22
+ 423 017e CE01      		movw r24,r28
+ 424 0180 0196      		adiw r24,1
+ 425 0182 0E94 0000 		call vfprintf
+ 426               	.LVL36:
+ 427               	/* epilogue start */
+ 428               	.LBE21:
+ 172:Lib/Print.cpp **** }
+ 429               		.loc 1 172 0
+ 430 0186 2E96      		adiw r28,14
+ 431 0188 0FB6      		in __tmp_reg__,__SREG__
+ 432 018a F894      		cli
+ 433 018c DEBF      		out __SP_H__,r29
+ 434 018e 0FBE      		out __SREG__,__tmp_reg__
+ 435 0190 CDBF      		out __SP_L__,r28
+ 436 0192 DF91      		pop r29
+ 437 0194 CF91      		pop r28
+ 438 0196 0895      		ret
+ 439               		.cfi_endproc
+ 440               	.LFE56:
+ 442               	.global	_ZN5Print6printfEPK19__FlashStringHelperz
+ 444               	_ZN5Print6printfEPK19__FlashStringHelperz:
+ 445               	.LFB57:
+ 173:Lib/Print.cpp **** 
+ 174:Lib/Print.cpp **** int Print::printf(const __FlashStringHelper *format, ...)
+ 175:Lib/Print.cpp **** {
+ 446               		.loc 1 175 0
+ 447               		.cfi_startproc
+ 448               	.LVL37:
+ 449 0198 CF93      		push r28
+ 450               	.LCFI30:
+ 451               		.cfi_def_cfa_offset 3
+ 452               		.cfi_offset 28, -2
+ 453 019a DF93      		push r29
+ 454               	.LCFI31:
+ 455               		.cfi_def_cfa_offset 4
+ 456               		.cfi_offset 29, -3
+ 457 019c CDB7      		in r28,__SP_L__
+ 458 019e DEB7      		in r29,__SP_H__
+ 459               	.LCFI32:
+ 460               		.cfi_def_cfa_register 28
+ 461 01a0 2E97      		sbiw r28,14
+ 462               	.LCFI33:
+ 463               		.cfi_def_cfa_offset 18
+ 464 01a2 0FB6      		in __tmp_reg__,__SREG__
+ 465 01a4 F894      		cli
+ 466 01a6 DEBF      		out __SP_H__,r29
+ 467 01a8 0FBE      		out __SREG__,__tmp_reg__
+ 468 01aa CDBF      		out __SP_L__,r28
+ 469               	/* prologue: function */
+ 470               	/* frame size = 14 */
+ 471               	/* stack size = 16 */
+ 472               	.L__stack_usage = 16
+ 473               	.LBB22:
+ 176:Lib/Print.cpp **** 	FILE f;
+ 177:Lib/Print.cpp **** 	va_list ap;
+ 178:Lib/Print.cpp **** 
+ 179:Lib/Print.cpp **** 	fdev_setup_stream(&f, printf_putchar, NULL, _FDEV_SETUP_WRITE);
+ 474               		.loc 1 179 0
+ 475 01ac 80E0      		ldi r24,lo8(gs(_ZL14printf_putcharcP6__file))
+ 476 01ae 90E0      		ldi r25,hi8(gs(_ZL14printf_putcharcP6__file))
+ 477 01b0 9A87      		std Y+10,r25
+ 478 01b2 8987      		std Y+9,r24
+ 479 01b4 1C86      		std Y+12,__zero_reg__
+ 480 01b6 1B86      		std Y+11,__zero_reg__
+ 481 01b8 82E0      		ldi r24,lo8(2)
+ 482 01ba 8C83      		std Y+4,r24
+ 180:Lib/Print.cpp **** 	fdev_set_udata(&f, this);
+ 483               		.loc 1 180 0
+ 484 01bc 8B89      		ldd r24,Y+19
+ 485 01be 9C89      		ldd r25,Y+20
+ 486 01c0 9E87      		std Y+14,r25
+ 487 01c2 8D87      		std Y+13,r24
+ 488               	.LVL38:
+ 181:Lib/Print.cpp **** 	va_start(ap, format);
+ 182:Lib/Print.cpp **** 	return vfprintf_P(&f, (const char *)format, ap);
+ 489               		.loc 1 182 0
+ 490 01c4 AE01      		movw r20,r28
+ 491 01c6 495E      		subi r20,-23
+ 492 01c8 5F4F      		sbci r21,-1
+ 493 01ca 6D89      		ldd r22,Y+21
+ 494 01cc 7E89      		ldd r23,Y+22
+ 495 01ce CE01      		movw r24,r28
+ 496 01d0 0196      		adiw r24,1
+ 497 01d2 0E94 0000 		call vfprintf_P
+ 498               	.LVL39:
+ 499               	/* epilogue start */
+ 500               	.LBE22:
+ 183:Lib/Print.cpp **** }
+ 501               		.loc 1 183 0
+ 502 01d6 2E96      		adiw r28,14
+ 503 01d8 0FB6      		in __tmp_reg__,__SREG__
+ 504 01da F894      		cli
+ 505 01dc DEBF      		out __SP_H__,r29
+ 506 01de 0FBE      		out __SREG__,__tmp_reg__
+ 507 01e0 CDBF      		out __SP_L__,r28
+ 508 01e2 DF91      		pop r29
+ 509 01e4 CF91      		pop r28
+ 510 01e6 0895      		ret
+ 511               		.cfi_endproc
+ 512               	.LFE57:
+ 514               	.global	_ZN5Print14printNumberDecEmh
+ 516               	_ZN5Print14printNumberDecEmh:
+ 517               	.LFB58:
+ 184:Lib/Print.cpp **** #endif
+ 185:Lib/Print.cpp **** 
+ 186:Lib/Print.cpp **** 
+ 187:Lib/Print.cpp **** //#define USE_HACKER_DELIGHT_OPTIMIZATION
+ 188:Lib/Print.cpp **** #define USE_STIMMER_OPTIMIZATION
+ 189:Lib/Print.cpp **** //#define USE_BENCHMARK_CODE
+ 190:Lib/Print.cpp **** 
+ 191:Lib/Print.cpp **** 
+ 192:Lib/Print.cpp **** #ifdef USE_HACKER_DELIGHT_OPTIMIZATION
+ 193:Lib/Print.cpp **** // Adapted from Hacker's Delight (Henry Warren, ISBN 0321842685) www.hackersdelight.org
+ 194:Lib/Print.cpp **** // by Rob Tillaart, Tom Carpenter, "genom2" with input from others...
+ 195:Lib/Print.cpp **** // http://forum.arduino.cc/index.php?topic=167414.0
+ 196:Lib/Print.cpp **** //
+ 197:Lib/Print.cpp **** #define divmod10_asm(in32, tmp32, mod8)				\
+ 198:Lib/Print.cpp **** asm volatile (							\
+ 199:Lib/Print.cpp **** 	"mov	%2, %A0		\n\t" /* mod = in */		\
+ 200:Lib/Print.cpp **** 	"ori	%A0, 1		\n\t" /* q = in | 1 */		\
+ 201:Lib/Print.cpp **** 	"movw	%A1, %A0	\n\t" /* x = q */		\
+ 202:Lib/Print.cpp **** 	"movw	%C1, %C0	\n\t"				\
+ 203:Lib/Print.cpp **** 	"lsr	%D1		\n\t" /* x = x >> 2 */		\
+ 204:Lib/Print.cpp **** 	"ror	%C1		\n\t"				\
+ 205:Lib/Print.cpp **** 	"ror	%B1		\n\t"				\
+ 206:Lib/Print.cpp **** 	"ror	%A1		\n\t"				\
+ 207:Lib/Print.cpp **** 	"lsr	%D1		\n\t"  				\
+ 208:Lib/Print.cpp **** 	"ror	%C1		\n\t"				\
+ 209:Lib/Print.cpp **** 	"ror	%B1		\n\t"				\
+ 210:Lib/Print.cpp **** 	"ror	%A1		\n\t"				\
+ 211:Lib/Print.cpp **** 	"sub	%A0, %A1	\n\t" /* q = q - x  */		\
+ 212:Lib/Print.cpp **** 	"sbc	%B0, %B1	\n\t"				\
+ 213:Lib/Print.cpp **** 	"sbc	%C0, %C1	\n\t"				\
+ 214:Lib/Print.cpp **** 	"sbc	%D0, %D1	\n\t"				\
+ 215:Lib/Print.cpp **** 	"movw	%A1, %A0	\n\t" /* x = q  */		\
+ 216:Lib/Print.cpp **** 	"movw	%C1, %C0	\n\t"				\
+ 217:Lib/Print.cpp **** 	"lsr	%D1		\n\t" /* x = x >> 4  */		\
+ 218:Lib/Print.cpp **** 	"ror	%C1		\n\t"				\
+ 219:Lib/Print.cpp **** 	"ror	%B1		\n\t"				\
+ 220:Lib/Print.cpp **** 	"ror	%A1		\n\t"				\
+ 221:Lib/Print.cpp **** 	"lsr	%D1		\n\t"				\
+ 222:Lib/Print.cpp **** 	"ror	%C1		\n\t"				\
+ 223:Lib/Print.cpp **** 	"ror	%B1		\n\t"				\
+ 224:Lib/Print.cpp **** 	"ror	%A1		\n\t"				\
+ 225:Lib/Print.cpp **** 	"lsr	%D1		\n\t"				\
+ 226:Lib/Print.cpp **** 	"ror	%C1		\n\t"				\
+ 227:Lib/Print.cpp **** 	"ror	%B1		\n\t"				\
+ 228:Lib/Print.cpp **** 	"ror	%A1		\n\t"				\
+ 229:Lib/Print.cpp **** 	"lsr	%D1		\n\t"				\
+ 230:Lib/Print.cpp **** 	"ror	%C1		\n\t"				\
+ 231:Lib/Print.cpp **** 	"ror	%B1		\n\t"				\
+ 232:Lib/Print.cpp **** 	"ror	%A1		\n\t"				\
+ 233:Lib/Print.cpp **** 	"add	%A1, %A0	\n\t" /* x = x + q */		\
+ 234:Lib/Print.cpp **** 	"adc	%B1, %B0	\n\t"				\
+ 235:Lib/Print.cpp **** 	"adc	%C1, %C0	\n\t"				\
+ 236:Lib/Print.cpp **** 	"adc	%D1, %D0	\n\t"				\
+ 237:Lib/Print.cpp **** 	"movw	%A0, %A1	\n\t" /* q = x */		\
+ 238:Lib/Print.cpp **** 	"movw	%C0, %C1	\n\t"				\
+ 239:Lib/Print.cpp **** 	"add	%A0, %B1	\n\t" /* q = q + (x >> 8) */	\
+ 240:Lib/Print.cpp **** 	"adc	%B0, %C1	\n\t"				\
+ 241:Lib/Print.cpp **** 	"adc	%C0, %D1	\n\t"				\
+ 242:Lib/Print.cpp **** 	"adc	%D0, r1		\n\t"				\
+ 243:Lib/Print.cpp **** 	"mov	%A0, %B0	\n\t" /* q = q >> 8 */		\
+ 244:Lib/Print.cpp **** 	"mov	%B0, %C0	\n\t"				\
+ 245:Lib/Print.cpp **** 	"mov	%C0, %D0	\n\t"				\
+ 246:Lib/Print.cpp **** 	"eor	%D0, %D0	\n\t"				\
+ 247:Lib/Print.cpp **** 	"add	%A0, %A1	\n\t" /* q = q + x */		\
+ 248:Lib/Print.cpp **** 	"adc	%B0, %B1	\n\t"				\
+ 249:Lib/Print.cpp **** 	"adc	%C0, %C1	\n\t"				\
+ 250:Lib/Print.cpp **** 	"adc	%D0, %D1	\n\t"				\
+ 251:Lib/Print.cpp **** 	"mov	%A0, %B0	\n\t" /* q = q >> 8 */		\
+ 252:Lib/Print.cpp **** 	"mov	%B0, %C0	\n\t"				\
+ 253:Lib/Print.cpp **** 	"mov	%C0, %D0	\n\t"				\
+ 254:Lib/Print.cpp **** 	"eor	%D0, %D0	\n\t"				\
+ 255:Lib/Print.cpp **** 	"add	%A0, %A1	\n\t" /* q = q + x */		\
+ 256:Lib/Print.cpp **** 	"adc	%B0, %B1	\n\t"				\
+ 257:Lib/Print.cpp **** 	"adc	%C0, %C1	\n\t"				\
+ 258:Lib/Print.cpp **** 	"adc	%D0, %D1	\n\t"				\
+ 259:Lib/Print.cpp **** 	"mov	%A0, %B0	\n\t" /* q = q >> 8 */		\
+ 260:Lib/Print.cpp **** 	"mov	%B0, %C0	\n\t"				\
+ 261:Lib/Print.cpp **** 	"mov	%C0, %D0	\n\t"				\
+ 262:Lib/Print.cpp **** 	"eor	%D0, %D0	\n\t"				\
+ 263:Lib/Print.cpp **** 	"add	%A0, %A1	\n\t" /* q = q + x */		\
+ 264:Lib/Print.cpp **** 	"adc	%B0, %B1	\n\t"				\
+ 265:Lib/Print.cpp **** 	"adc	%C0, %C1	\n\t"				\
+ 266:Lib/Print.cpp **** 	"adc	%D0, %D1	\n\t"				\
+ 267:Lib/Print.cpp **** 	"andi	%A0, 0xF8	\n\t" /* q = q & ~0x7 */	\
+ 268:Lib/Print.cpp **** 	"sub	%2, %A0		\n\t" /* mod = mod - q */	\
+ 269:Lib/Print.cpp **** 	"lsr	%D0		\n\t" /* q = q >> 2  */		\
+ 270:Lib/Print.cpp **** 	"ror	%C0		\n\t"				\
+ 271:Lib/Print.cpp **** 	"ror	%B0		\n\t"				\
+ 272:Lib/Print.cpp **** 	"ror	%A0		\n\t"				\
+ 273:Lib/Print.cpp **** 	"lsr	%D0		\n\t"				\
+ 274:Lib/Print.cpp **** 	"ror	%C0		\n\t"				\
+ 275:Lib/Print.cpp **** 	"ror	%B0		\n\t"				\
+ 276:Lib/Print.cpp **** 	"ror	%A0		\n\t"				\
+ 277:Lib/Print.cpp **** 	"sub	%2, %A0		\n\t" /* mod = mod - q */	\
+ 278:Lib/Print.cpp **** 	"lsr	%D0		\n\t" /* q = q >> 1 */		\
+ 279:Lib/Print.cpp **** 	"ror	%C0		\n\t"				\
+ 280:Lib/Print.cpp **** 	"ror	%B0		\n\t"				\
+ 281:Lib/Print.cpp **** 	"ror	%A0		\n\t"				\
+ 282:Lib/Print.cpp **** 	:  "+d" (in32), "=r" (tmp32), "=r" (mod8) : : "r0"	\
+ 283:Lib/Print.cpp **** )
+ 284:Lib/Print.cpp **** #endif // USE_HACKER_DELIGHT_OPTIMIZATION
+ 285:Lib/Print.cpp **** 
+ 286:Lib/Print.cpp **** #ifdef USE_STIMMER_OPTIMIZATION
+ 287:Lib/Print.cpp **** // http://forum.arduino.cc/index.php?topic=167414.msg1293679#msg1293679
+ 288:Lib/Print.cpp **** // http://forum.arduino.cc/index.php?topic=167414.msg1309482#msg1309482
+ 289:Lib/Print.cpp **** //  equivelant code:
+ 290:Lib/Print.cpp **** //    mod8 = in32 % 10;
+ 291:Lib/Print.cpp **** //    in32 = in32 / 10;
+ 292:Lib/Print.cpp **** //    tmp8 = 10;
+ 293:Lib/Print.cpp **** #define divmod10_asm(in32, mod8, tmp8)		\
+ 294:Lib/Print.cpp **** asm volatile (					\
+ 295:Lib/Print.cpp ****       " ldi %2,51     \n\t"			\
+ 296:Lib/Print.cpp ****       " mul %A0,%2    \n\t"			\
+ 297:Lib/Print.cpp ****       " clr %A0       \n\t"			\
+ 298:Lib/Print.cpp ****       " add r0,%2     \n\t"			\
+ 299:Lib/Print.cpp ****       " adc %A0,r1    \n\t"			\
+ 300:Lib/Print.cpp ****       " mov %1,r0     \n\t"			\
+ 301:Lib/Print.cpp ****       " mul %B0,%2    \n\t"			\
+ 302:Lib/Print.cpp ****       " clr %B0       \n\t"			\
+ 303:Lib/Print.cpp ****       " add %A0,r0    \n\t"			\
+ 304:Lib/Print.cpp ****       " adc %B0,r1    \n\t"			\
+ 305:Lib/Print.cpp ****       " mul %C0,%2    \n\t"			\
+ 306:Lib/Print.cpp ****       " clr %C0       \n\t"			\
+ 307:Lib/Print.cpp ****       " add %B0,r0    \n\t"			\
+ 308:Lib/Print.cpp ****       " adc %C0,r1    \n\t"			\
+ 309:Lib/Print.cpp ****       " mul %D0,%2    \n\t"			\
+ 310:Lib/Print.cpp ****       " clr %D0       \n\t"			\
+ 311:Lib/Print.cpp ****       " add %C0,r0    \n\t"			\
+ 312:Lib/Print.cpp ****       " adc %D0,r1    \n\t"			\
+ 313:Lib/Print.cpp ****       " clr r1        \n\t"  			\
+ 314:Lib/Print.cpp ****       " add %1,%A0    \n\t"			\
+ 315:Lib/Print.cpp ****       " adc %A0,%B0   \n\t"			\
+ 316:Lib/Print.cpp ****       " adc %B0,%C0   \n\t"			\
+ 317:Lib/Print.cpp ****       " adc %C0,%D0   \n\t"			\
+ 318:Lib/Print.cpp ****       " adc %D0,r1    \n\t"			\
+ 319:Lib/Print.cpp ****       " add %1,%B0    \n\t"			\
+ 320:Lib/Print.cpp ****       " adc %A0,%C0   \n\t"			\
+ 321:Lib/Print.cpp ****       " adc %B0,%D0   \n\t"			\
+ 322:Lib/Print.cpp ****       " adc %C0,r1    \n\t"			\
+ 323:Lib/Print.cpp ****       " adc %D0,r1    \n\t"			\
+ 324:Lib/Print.cpp ****       " add %1,%D0    \n\t"			\
+ 325:Lib/Print.cpp ****       " adc %A0,r1    \n\t"			\
+ 326:Lib/Print.cpp ****       " adc %B0,r1    \n\t"			\
+ 327:Lib/Print.cpp ****       " adc %C0,r1    \n\t"			\
+ 328:Lib/Print.cpp ****       " adc %D0,r1    \n\t"			\
+ 329:Lib/Print.cpp ****       " lsr %D0       \n\t"			\
+ 330:Lib/Print.cpp ****       " ror %C0       \n\t"			\
+ 331:Lib/Print.cpp ****       " ror %B0       \n\t"			\
+ 332:Lib/Print.cpp ****       " ror %A0       \n\t"			\
+ 333:Lib/Print.cpp ****       " ror %1        \n\t"   			\
+ 334:Lib/Print.cpp ****       " ldi %2,10     \n\t"			\
+ 335:Lib/Print.cpp ****       " mul %1,%2     \n\t"			\
+ 336:Lib/Print.cpp ****       " mov %1,r1     \n\t"			\
+ 337:Lib/Print.cpp ****       " clr r1        \n\t"			\
+ 338:Lib/Print.cpp ****       :"+r"(in32),"=d"(mod8),"=d"(tmp8) : : "r0")
+ 339:Lib/Print.cpp **** #endif // USE_STIMMER_OPTIMIZATION
+ 340:Lib/Print.cpp **** 
+ 341:Lib/Print.cpp **** 
+ 342:Lib/Print.cpp **** 
+ 343:Lib/Print.cpp **** #ifdef USE_BENCHMARK_CODE
+ 344:Lib/Print.cpp **** uint32_t usec_print = 0;
+ 345:Lib/Print.cpp **** #endif
+ 346:Lib/Print.cpp **** 
+ 347:Lib/Print.cpp **** 
+ 348:Lib/Print.cpp **** #if ARDUINO >= 100
+ 349:Lib/Print.cpp **** size_t Print::printNumberDec(unsigned long n, uint8_t sign)
+ 350:Lib/Print.cpp **** #else
+ 351:Lib/Print.cpp **** void Print::printNumberDec(unsigned long n, uint8_t sign)
+ 352:Lib/Print.cpp **** #endif
+ 353:Lib/Print.cpp **** {
+ 518               		.loc 1 353 0
+ 519               		.cfi_startproc
+ 520               	.LVL40:
+ 521 01e8 CF93      		push r28
+ 522               	.LCFI34:
+ 523               		.cfi_def_cfa_offset 3
+ 524               		.cfi_offset 28, -2
+ 525 01ea DF93      		push r29
+ 526               	.LCFI35:
+ 527               		.cfi_def_cfa_offset 4
+ 528               		.cfi_offset 29, -3
+ 529 01ec CDB7      		in r28,__SP_L__
+ 530 01ee DEB7      		in r29,__SP_H__
+ 531               	.LCFI36:
+ 532               		.cfi_def_cfa_register 28
+ 533 01f0 2B97      		sbiw r28,11
+ 534               	.LCFI37:
+ 535               		.cfi_def_cfa_offset 15
+ 536 01f2 0FB6      		in __tmp_reg__,__SREG__
+ 537 01f4 F894      		cli
+ 538 01f6 DEBF      		out __SP_H__,r29
+ 539 01f8 0FBE      		out __SREG__,__tmp_reg__
+ 540 01fa CDBF      		out __SP_L__,r28
+ 541               	/* prologue: function */
+ 542               	/* frame size = 11 */
+ 543               	/* stack size = 13 */
+ 544               	.L__stack_usage = 13
+ 545               	.LVL41:
+ 546               	.LBB23:
+ 354:Lib/Print.cpp **** 	uint8_t digit, buf[11], *p;
+ 355:Lib/Print.cpp **** #if defined(USE_HACKER_DELIGHT_OPTIMIZATION)
+ 356:Lib/Print.cpp **** 	uint32_t tmp32;
+ 357:Lib/Print.cpp **** #elif defined(USE_STIMMER_OPTIMIZATION)
+ 358:Lib/Print.cpp **** 	uint8_t tmp8;
+ 359:Lib/Print.cpp **** #endif
+ 360:Lib/Print.cpp **** 
+ 361:Lib/Print.cpp **** #ifdef USE_BENCHMARK_CODE
+ 362:Lib/Print.cpp **** 	uint32_t usec = micros();
+ 363:Lib/Print.cpp **** #endif
+ 364:Lib/Print.cpp **** 	p = buf + (sizeof(buf)-1);
+ 547               		.loc 1 364 0
+ 548 01fc DE01      		movw r26,r28
+ 549 01fe 1B96      		adiw r26,11
+ 550               	.LVL42:
+ 551               	.L17:
+ 365:Lib/Print.cpp **** 	do {
+ 366:Lib/Print.cpp **** 		#if defined(USE_HACKER_DELIGHT_OPTIMIZATION)
+ 367:Lib/Print.cpp **** 		divmod10_asm(n, tmp32, digit);
+ 368:Lib/Print.cpp **** 		#elif defined(USE_STIMMER_OPTIMIZATION)
+ 369:Lib/Print.cpp **** 		divmod10_asm(n, digit, tmp8);
+ 552               		.loc 1 369 0 discriminator 1
+ 553               	/* #APP */
+ 554               	 ;  369 "Lib/Print.cpp" 1
+ 555 0200 E3E3      		 ldi r30,51     
+ 556 0202 4E9F      		 mul r20,r30    
+ 557 0204 4427      		 clr r20       
+ 558 0206 0E0E      		 add r0,r30     
+ 559 0208 411D      		 adc r20,r1    
+ 560 020a 302D      		 mov r19,r0     
+ 561 020c 5E9F      		 mul r21,r30    
+ 562 020e 5527      		 clr r21       
+ 563 0210 400D      		 add r20,r0    
+ 564 0212 511D      		 adc r21,r1    
+ 565 0214 6E9F      		 mul r22,r30    
+ 566 0216 6627      		 clr r22       
+ 567 0218 500D      		 add r21,r0    
+ 568 021a 611D      		 adc r22,r1    
+ 569 021c 7E9F      		 mul r23,r30    
+ 570 021e 7727      		 clr r23       
+ 571 0220 600D      		 add r22,r0    
+ 572 0222 711D      		 adc r23,r1    
+ 573 0224 1124      		 clr r1        
+ 574 0226 340F      		 add r19,r20    
+ 575 0228 451F      		 adc r20,r21   
+ 576 022a 561F      		 adc r21,r22   
+ 577 022c 671F      		 adc r22,r23   
+ 578 022e 711D      		 adc r23,r1    
+ 579 0230 350F      		 add r19,r21    
+ 580 0232 461F      		 adc r20,r22   
+ 581 0234 571F      		 adc r21,r23   
+ 582 0236 611D      		 adc r22,r1    
+ 583 0238 711D      		 adc r23,r1    
+ 584 023a 370F      		 add r19,r23    
+ 585 023c 411D      		 adc r20,r1    
+ 586 023e 511D      		 adc r21,r1    
+ 587 0240 611D      		 adc r22,r1    
+ 588 0242 711D      		 adc r23,r1    
+ 589 0244 7695      		 lsr r23       
+ 590 0246 6795      		 ror r22       
+ 591 0248 5795      		 ror r21       
+ 592 024a 4795      		 ror r20       
+ 593 024c 3795      		 ror r19        
+ 594 024e EAE0      		 ldi r30,10     
+ 595 0250 3E9F      		 mul r19,r30     
+ 596 0252 312D      		 mov r19,r1     
+ 597 0254 1124      		 clr r1        
+ 598               		
+ 599               	 ;  0 "" 2
+ 600               	.LVL43:
+ 370:Lib/Print.cpp **** 		#else
+ 371:Lib/Print.cpp **** 		tmp32 = n;
+ 372:Lib/Print.cpp **** 		n = n / 10;
+ 373:Lib/Print.cpp **** 		digit = tmp32 - n * 10;
+ 374:Lib/Print.cpp **** 		#endif
+ 375:Lib/Print.cpp **** 		*--p = digit + '0';
+ 601               		.loc 1 375 0 discriminator 1
+ 602               	/* #NOAPP */
+ 603 0256 305D      		subi r19,lo8(-(48))
+ 604               	.LVL44:
+ 605 0258 3E93      		st -X,r19
+ 606               	.LVL45:
+ 365:Lib/Print.cpp **** 	do {
+ 607               		.loc 1 365 0 discriminator 1
+ 608 025a 4115      		cp r20,__zero_reg__
+ 609 025c 5105      		cpc r21,__zero_reg__
+ 610 025e 6105      		cpc r22,__zero_reg__
+ 611 0260 7105      		cpc r23,__zero_reg__
+ 612 0262 01F0      		breq .+2
+ 613 0264 00C0      		rjmp .L17
+ 376:Lib/Print.cpp **** 	} while (n);
+ 377:Lib/Print.cpp **** 	if (sign) *--p = '-';
+ 614               		.loc 1 377 0
+ 615 0266 2223      		tst r18
+ 616 0268 01F0      		breq .L18
+ 617               		.loc 1 377 0 is_stmt 0 discriminator 1
+ 618 026a 1197      		sbiw r26,1
+ 619               	.LVL46:
+ 620 026c FD01      		movw r30,r26
+ 621 026e 2DE2      		ldi r18,lo8(45)
+ 622               	.LVL47:
+ 623 0270 2083      		st Z,r18
+ 624               	.LVL48:
+ 625               	.L18:
+ 378:Lib/Print.cpp **** #ifdef USE_BENCHMARK_CODE
+ 379:Lib/Print.cpp **** 	usec_print += micros() - usec;
+ 380:Lib/Print.cpp **** #endif
+ 381:Lib/Print.cpp **** #if ARDUINO >= 100
+ 382:Lib/Print.cpp **** 	return write(p, sizeof(buf)-1 - (p - buf));
+ 626               		.loc 1 382 0 is_stmt 1
+ 627 0272 FC01      		movw r30,r24
+ 628 0274 2081      		ld r18,Z
+ 629 0276 3181      		ldd r19,Z+1
+ 630 0278 AE01      		movw r20,r28
+ 631 027a 4A1B      		sub r20,r26
+ 632 027c 5B0B      		sbc r21,r27
+ 633 027e 455F      		subi r20,-11
+ 634 0280 5F4F      		sbci r21,-1
+ 635 0282 F901      		movw r30,r18
+ 636 0284 2281      		ldd r18,Z+2
+ 637 0286 3381      		ldd r19,Z+3
+ 638 0288 BD01      		movw r22,r26
+ 639 028a F901      		movw r30,r18
+ 640 028c 0995      		icall
+ 641               	.LVL49:
+ 642               	/* epilogue start */
+ 643               	.LBE23:
+ 383:Lib/Print.cpp **** #else
+ 384:Lib/Print.cpp **** 	write(p, sizeof(buf)-1 - (p - buf));
+ 385:Lib/Print.cpp **** #endif
+ 386:Lib/Print.cpp **** }
+ 644               		.loc 1 386 0
+ 645 028e 2B96      		adiw r28,11
+ 646 0290 0FB6      		in __tmp_reg__,__SREG__
+ 647 0292 F894      		cli
+ 648 0294 DEBF      		out __SP_H__,r29
+ 649 0296 0FBE      		out __SREG__,__tmp_reg__
+ 650 0298 CDBF      		out __SP_L__,r28
+ 651 029a DF91      		pop r29
+ 652 029c CF91      		pop r28
+ 653 029e 0895      		ret
+ 654               		.cfi_endproc
+ 655               	.LFE58:
+ 657               	.global	_ZN5Print5printEl
+ 659               	_ZN5Print5printEl:
+ 660               	.LFB53:
+ 118:Lib/Print.cpp **** {
+ 661               		.loc 1 118 0
+ 662               		.cfi_startproc
+ 663               	.LVL50:
+ 664               	/* prologue: function */
+ 665               	/* frame size = 0 */
+ 666               	/* stack size = 0 */
+ 667               	.L__stack_usage = 0
+ 668               	.LBB24:
+ 121:Lib/Print.cpp **** 	if (n < 0) {
+ 669               		.loc 1 121 0
+ 670 02a0 77FF      		sbrs r23,7
+ 671 02a2 00C0      		rjmp .L24
+ 672               	.LVL51:
+ 123:Lib/Print.cpp **** 		n = -n;
+ 673               		.loc 1 123 0
+ 674 02a4 7095      		com r23
+ 675 02a6 6095      		com r22
+ 676 02a8 5095      		com r21
+ 677 02aa 4195      		neg r20
+ 678 02ac 5F4F      		sbci r21,lo8(-1)
+ 679 02ae 6F4F      		sbci r22,lo8(-1)
+ 680 02b0 7F4F      		sbci r23,lo8(-1)
+ 681               	.LVL52:
+ 122:Lib/Print.cpp **** 		sign = 1;
+ 682               		.loc 1 122 0
+ 683 02b2 21E0      		ldi r18,lo8(1)
+ 684 02b4 00C0      		rjmp .L23
+ 685               	.LVL53:
+ 686               	.L24:
+ 119:Lib/Print.cpp **** 	uint8_t sign=0;
+ 687               		.loc 1 119 0
+ 688 02b6 20E0      		ldi r18,0
+ 689               	.LVL54:
+ 690               	.L23:
+ 691               	.LBB25:
+ 692               	.LBB26:
+ 693               		.file 3 "Lib/Print.h"
+   1:Lib/Print.h   **** /*
+   2:Lib/Print.h   ****   Print.h - Base class that provides print() and println()
+   3:Lib/Print.h   ****   Copyright (c) 2008 David A. Mellis.  All right reserved.
+   4:Lib/Print.h   **** 
+   5:Lib/Print.h   ****   This library is free software; you can redistribute it and/or
+   6:Lib/Print.h   ****   modify it under the terms of the GNU Lesser General Public
+   7:Lib/Print.h   ****   License as published by the Free Software Foundation; either
+   8:Lib/Print.h   ****   version 2.1 of the License, or (at your option) any later version.
+   9:Lib/Print.h   **** 
+  10:Lib/Print.h   ****   This library is distributed in the hope that it will be useful,
+  11:Lib/Print.h   ****   but WITHOUT ANY WARRANTY; without even the implied warranty of
+  12:Lib/Print.h   ****   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  13:Lib/Print.h   ****   Lesser General Public License for more details.
+  14:Lib/Print.h   **** 
+  15:Lib/Print.h   ****   You should have received a copy of the GNU Lesser General Public
+  16:Lib/Print.h   ****   License along with this library; if not, write to the Free Software
+  17:Lib/Print.h   ****   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+  18:Lib/Print.h   **** */
+  19:Lib/Print.h   **** 
+  20:Lib/Print.h   **** #ifndef Print_h
+  21:Lib/Print.h   **** #define Print_h
+  22:Lib/Print.h   **** 
+  23:Lib/Print.h   **** #include <inttypes.h>
+  24:Lib/Print.h   **** #include <stdio.h> // for size_t
+  25:Lib/Print.h   **** #include <stdarg.h>
+  26:Lib/Print.h   **** #include "core_id.h"
+  27:Lib/Print.h   **** //#include "WString.h"
+  28:Lib/Print.h   **** #include "Printable.h"
+  29:Lib/Print.h   **** 
+  30:Lib/Print.h   **** #define DEC 10
+  31:Lib/Print.h   **** #define HEX 16
+  32:Lib/Print.h   **** #define OCT 8
+  33:Lib/Print.h   **** #define BIN 2
+  34:Lib/Print.h   **** #define BYTE 0
+  35:Lib/Print.h   **** 
+  36:Lib/Print.h   **** class __FlashStringHelper;
+  37:Lib/Print.h   **** 
+  38:Lib/Print.h   **** #if ARDUINO >= 100
+  39:Lib/Print.h   **** class Print
+  40:Lib/Print.h   **** {
+  41:Lib/Print.h   ****   public:
+  42:Lib/Print.h   **** 	Print() : write_error(0) {}
+  43:Lib/Print.h   **** 	virtual size_t write(uint8_t b);
+  44:Lib/Print.h   **** 	size_t write(const char *str)			{ return write((const uint8_t *)str, strlen(str)); }
+  45:Lib/Print.h   **** 	virtual size_t write(const uint8_t *buffer, size_t size);
+  46:Lib/Print.h   **** 	size_t write(const char *buffer, size_t size)   { return write((const uint8_t *)buffer, size); }
+  47:Lib/Print.h   **** 	//size_t print(const String &s);
+  48:Lib/Print.h   **** 	size_t print(char c)				{ return write((uint8_t)c); }
+  49:Lib/Print.h   **** 	size_t print(const char s[])			{ return write(s); }
+  50:Lib/Print.h   **** 	size_t print(const __FlashStringHelper *f);
+  51:Lib/Print.h   **** 
+  52:Lib/Print.h   **** 	size_t print(uint8_t b)				{ return printNumber(b, 0, 10); }
+  53:Lib/Print.h   **** 	size_t print(int n)				{ return print((long)n); }
+  54:Lib/Print.h   **** 	size_t print(unsigned int n)			{ return printNumber(n, 0, 10); }
+  55:Lib/Print.h   **** 	size_t print(long n);
+  56:Lib/Print.h   **** 	size_t print(unsigned long n)			{ return printNumber(n, 0, 10); }
+  57:Lib/Print.h   **** 
+  58:Lib/Print.h   **** 	size_t print(unsigned char n, int base)		{ return printNumber(n, 0, base); }
+  59:Lib/Print.h   **** 	size_t print(int n, int base)			{ return (base == 10) ? print(n) : printNumber(n, 0, base); }
+  60:Lib/Print.h   **** 	size_t print(unsigned int n, int base)		{ return printNumber(n, 0, base); }
+  61:Lib/Print.h   **** 	size_t print(long n, int base)			{ return (base == 10) ? print(n) : printNumber(n, 0, base); }
+  62:Lib/Print.h   **** 	size_t print(unsigned long n, int base)		{ return printNumber(n, 0, base); }
+  63:Lib/Print.h   **** 
+  64:Lib/Print.h   **** 	size_t print(double n, int digits = 2)		{ return printFloat(n, digits); }
+  65:Lib/Print.h   **** 	size_t print(const Printable &obj)		{ return obj.printTo(*this); }
+  66:Lib/Print.h   **** 	size_t println(void);
+  67:Lib/Print.h   **** 	//size_t println(const String &s)			{ return print(s) + println(); }
+  68:Lib/Print.h   **** 	size_t println(char c)				{ return print(c) + println(); }
+  69:Lib/Print.h   **** 	size_t println(const char s[])			{ return print(s) + println(); }
+  70:Lib/Print.h   **** 	size_t println(const __FlashStringHelper *f)	{ return print(f) + println(); }
+  71:Lib/Print.h   **** 
+  72:Lib/Print.h   **** 	size_t println(uint8_t b)			{ return print(b) + println(); }
+  73:Lib/Print.h   **** 	size_t println(int n)				{ return print(n) + println(); }
+  74:Lib/Print.h   **** 	size_t println(unsigned int n)			{ return print(n) + println(); }
+  75:Lib/Print.h   **** 	size_t println(long n)				{ return print(n) + println(); }
+  76:Lib/Print.h   **** 	size_t println(unsigned long n)			{ return print(n) + println(); }
+  77:Lib/Print.h   **** 
+  78:Lib/Print.h   **** 	size_t println(unsigned char n, int base)	{ return print(n, base) + println(); }
+  79:Lib/Print.h   **** 	size_t println(int n, int base)			{ return print(n, base) + println(); }
+  80:Lib/Print.h   **** 	size_t println(unsigned int n, int base)	{ return print(n, base) + println(); }
+  81:Lib/Print.h   **** 	size_t println(long n, int base)		{ return print(n, base) + println(); }
+  82:Lib/Print.h   **** 	size_t println(unsigned long n, int base)	{ return print(n, base) + println(); }
+  83:Lib/Print.h   **** 
+  84:Lib/Print.h   **** 	size_t println(double n, int digits = 2)	{ return print(n, digits) + println(); }
+  85:Lib/Print.h   **** 	size_t println(const Printable &obj)		{ return obj.printTo(*this) + println(); }
+  86:Lib/Print.h   **** 	int getWriteError() { return write_error; }
+  87:Lib/Print.h   **** 	void clearWriteError() { setWriteError(0); }
+  88:Lib/Print.h   **** 	int printf(const char *format, ...);
+  89:Lib/Print.h   **** 	int printf(const __FlashStringHelper *format, ...);
+  90:Lib/Print.h   ****   protected:
+  91:Lib/Print.h   **** 	void setWriteError(int err = 1) { write_error = err; }
+  92:Lib/Print.h   ****   private:
+  93:Lib/Print.h   **** 	char write_error;
+  94:Lib/Print.h   **** 	size_t printNumberDec(unsigned long n, uint8_t sign);
+  95:Lib/Print.h   **** 	size_t printNumberHex(unsigned long n);
+  96:Lib/Print.h   **** 	size_t printNumberBin(unsigned long n);
+  97:Lib/Print.h   **** 	size_t printNumberAny(unsigned long n, uint8_t base);
+  98:Lib/Print.h   **** 	inline size_t printNumber(unsigned long n, uint8_t sign, uint8_t base) __attribute__((always_inlin
+  99:Lib/Print.h   **** 		// when "base" is a constant (pretty much always), the
+ 100:Lib/Print.h   **** 		// compiler optimizes this to a single function call.
+ 101:Lib/Print.h   **** 		if (base == 0) return write((uint8_t)n);
+ 102:Lib/Print.h   **** 		if (base == 10 || base < 2) return printNumberDec(n, sign);
+ 694               		.loc 3 102 0
+ 695 02b8 0C94 0000 		jmp _ZN5Print14printNumberDecEmh
+ 696               	.LVL55:
+ 697               	.LBE26:
+ 698               	.LBE25:
+ 699               	.LBE24:
+ 700               		.cfi_endproc
+ 701               	.LFE53:
+ 703               	.global	_ZN5Print14printNumberHexEm
+ 705               	_ZN5Print14printNumberHexEm:
+ 706               	.LFB59:
+ 387:Lib/Print.cpp **** 
+ 388:Lib/Print.cpp **** #if ARDUINO >= 100
+ 389:Lib/Print.cpp **** size_t Print::printNumberHex(unsigned long n)
+ 390:Lib/Print.cpp **** #else
+ 391:Lib/Print.cpp **** void Print::printNumberHex(unsigned long n)
+ 392:Lib/Print.cpp **** #endif
+ 393:Lib/Print.cpp **** {
+ 707               		.loc 1 393 0
+ 708               		.cfi_startproc
+ 709               	.LVL56:
+ 710 02bc CF93      		push r28
+ 711               	.LCFI38:
+ 712               		.cfi_def_cfa_offset 3
+ 713               		.cfi_offset 28, -2
+ 714 02be DF93      		push r29
+ 715               	.LCFI39:
+ 716               		.cfi_def_cfa_offset 4
+ 717               		.cfi_offset 29, -3
+ 718 02c0 CDB7      		in r28,__SP_L__
+ 719 02c2 DEB7      		in r29,__SP_H__
+ 720               	.LCFI40:
+ 721               		.cfi_def_cfa_register 28
+ 722 02c4 2897      		sbiw r28,8
+ 723               	.LCFI41:
+ 724               		.cfi_def_cfa_offset 12
+ 725 02c6 0FB6      		in __tmp_reg__,__SREG__
+ 726 02c8 F894      		cli
+ 727 02ca DEBF      		out __SP_H__,r29
+ 728 02cc 0FBE      		out __SREG__,__tmp_reg__
+ 729 02ce CDBF      		out __SP_L__,r28
+ 730               	/* prologue: function */
+ 731               	/* frame size = 8 */
+ 732               	/* stack size = 10 */
+ 733               	.L__stack_usage = 10
+ 734               	.LVL57:
+ 735               	.LBB27:
+ 394:Lib/Print.cpp **** 	uint8_t digit, buf[8], *p;
+ 395:Lib/Print.cpp **** 
+ 396:Lib/Print.cpp **** 	p = buf + (sizeof(buf)-1);
+ 736               		.loc 1 396 0
+ 737 02d0 DE01      		movw r26,r28
+ 738 02d2 1896      		adiw r26,8
+ 739               	.LVL58:
+ 740               	.L29:
+ 397:Lib/Print.cpp **** 	do {
+ 398:Lib/Print.cpp **** 		digit = n & 15;
+ 741               		.loc 1 398 0
+ 742 02d4 242F      		mov r18,r20
+ 743 02d6 2F70      		andi r18,lo8(15)
+ 744               	.LVL59:
+ 399:Lib/Print.cpp **** 		*--p = (digit < 10) ? '0' + digit : 'A' + digit - 10;
+ 745               		.loc 1 399 0
+ 746 02d8 1197      		sbiw r26,1
+ 747               	.LVL60:
+ 748 02da 2A30      		cpi r18,lo8(10)
+ 749 02dc 00F4      		brsh .L26
+ 750               		.loc 1 399 0 is_stmt 0 discriminator 1
+ 751 02de 205D      		subi r18,lo8(-(48))
+ 752               	.LVL61:
+ 753 02e0 00C0      		rjmp .L27
+ 754               	.LVL62:
+ 755               	.L26:
+ 756               		.loc 1 399 0 discriminator 2
+ 757 02e2 295C      		subi r18,lo8(-(55))
+ 758               	.LVL63:
+ 759               	.L27:
+ 760               		.loc 1 399 0 discriminator 3
+ 761 02e4 2C93      		st X,r18
+ 400:Lib/Print.cpp **** 		n >>= 4;
+ 762               		.loc 1 400 0 is_stmt 1 discriminator 3
+ 763 02e6 24E0      		ldi r18,4
+ 764               		1:
+ 765 02e8 7695      		lsr r23
+ 766 02ea 6795      		ror r22
+ 767 02ec 5795      		ror r21
+ 768 02ee 4795      		ror r20
+ 769 02f0 2A95      		dec r18
+ 770 02f2 01F4      		brne 1b
+ 771               	.LVL64:
+ 397:Lib/Print.cpp **** 	do {
+ 772               		.loc 1 397 0 discriminator 3
+ 773 02f4 4115      		cp r20,__zero_reg__
+ 774 02f6 5105      		cpc r21,__zero_reg__
+ 775 02f8 6105      		cpc r22,__zero_reg__
+ 776 02fa 7105      		cpc r23,__zero_reg__
+ 777 02fc 01F4      		brne .L29
+ 401:Lib/Print.cpp **** 	} while (n);
+ 402:Lib/Print.cpp **** #if ARDUINO >= 100
+ 403:Lib/Print.cpp **** 	return write(p, sizeof(buf)-1 - (p - buf));
+ 778               		.loc 1 403 0
+ 779 02fe FC01      		movw r30,r24
+ 780 0300 2081      		ld r18,Z
+ 781 0302 3181      		ldd r19,Z+1
+ 782 0304 AE01      		movw r20,r28
+ 783               	.LVL65:
+ 784 0306 4A1B      		sub r20,r26
+ 785 0308 5B0B      		sbc r21,r27
+ 786 030a 485F      		subi r20,-8
+ 787 030c 5F4F      		sbci r21,-1
+ 788 030e F901      		movw r30,r18
+ 789 0310 2281      		ldd r18,Z+2
+ 790 0312 3381      		ldd r19,Z+3
+ 791 0314 BD01      		movw r22,r26
+ 792 0316 F901      		movw r30,r18
+ 793 0318 0995      		icall
+ 794               	.LVL66:
+ 795               	/* epilogue start */
+ 796               	.LBE27:
+ 404:Lib/Print.cpp **** #else
+ 405:Lib/Print.cpp **** 	write(p, sizeof(buf)-1 - (p - buf));
+ 406:Lib/Print.cpp **** #endif
+ 407:Lib/Print.cpp **** }
+ 797               		.loc 1 407 0
+ 798 031a 2896      		adiw r28,8
+ 799 031c 0FB6      		in __tmp_reg__,__SREG__
+ 800 031e F894      		cli
+ 801 0320 DEBF      		out __SP_H__,r29
+ 802 0322 0FBE      		out __SREG__,__tmp_reg__
+ 803 0324 CDBF      		out __SP_L__,r28
+ 804 0326 DF91      		pop r29
+ 805 0328 CF91      		pop r28
+ 806 032a 0895      		ret
+ 807               		.cfi_endproc
+ 808               	.LFE59:
+ 810               	.global	_ZN5Print14printNumberBinEm
+ 812               	_ZN5Print14printNumberBinEm:
+ 813               	.LFB60:
+ 408:Lib/Print.cpp **** 
+ 409:Lib/Print.cpp **** #if ARDUINO >= 100
+ 410:Lib/Print.cpp **** size_t Print::printNumberBin(unsigned long n)
+ 411:Lib/Print.cpp **** #else
+ 412:Lib/Print.cpp **** void Print::printNumberBin(unsigned long n)
+ 413:Lib/Print.cpp **** #endif
+ 414:Lib/Print.cpp **** {
+ 814               		.loc 1 414 0
+ 815               		.cfi_startproc
+ 816               	.LVL67:
+ 817 032c CF93      		push r28
+ 818               	.LCFI42:
+ 819               		.cfi_def_cfa_offset 3
+ 820               		.cfi_offset 28, -2
+ 821 032e DF93      		push r29
+ 822               	.LCFI43:
+ 823               		.cfi_def_cfa_offset 4
+ 824               		.cfi_offset 29, -3
+ 825 0330 CDB7      		in r28,__SP_L__
+ 826 0332 DEB7      		in r29,__SP_H__
+ 827               	.LCFI44:
+ 828               		.cfi_def_cfa_register 28
+ 829 0334 A097      		sbiw r28,32
+ 830               	.LCFI45:
+ 831               		.cfi_def_cfa_offset 36
+ 832 0336 0FB6      		in __tmp_reg__,__SREG__
+ 833 0338 F894      		cli
+ 834 033a DEBF      		out __SP_H__,r29
+ 835 033c 0FBE      		out __SREG__,__tmp_reg__
+ 836 033e CDBF      		out __SP_L__,r28
+ 837               	/* prologue: function */
+ 838               	/* frame size = 32 */
+ 839               	/* stack size = 34 */
+ 840               	.L__stack_usage = 34
+ 841               	.LVL68:
+ 842               	.LBB28:
+ 415:Lib/Print.cpp **** 	uint8_t buf[32], *p;
+ 416:Lib/Print.cpp **** 
+ 417:Lib/Print.cpp **** 	p = buf + (sizeof(buf)-1);
+ 843               		.loc 1 417 0
+ 844 0340 DE01      		movw r26,r28
+ 845 0342 9096      		adiw r26,32
+ 846               	.LVL69:
+ 847               	.L32:
+ 418:Lib/Print.cpp **** 	do {
+ 419:Lib/Print.cpp **** 		*--p = '0' + ((uint8_t)n & 1);
+ 848               		.loc 1 419 0 discriminator 1
+ 849 0344 242F      		mov r18,r20
+ 850 0346 2170      		andi r18,lo8(1)
+ 851 0348 205D      		subi r18,lo8(-(48))
+ 852 034a 2E93      		st -X,r18
+ 853               	.LVL70:
+ 420:Lib/Print.cpp **** 		n >>= 1;
+ 854               		.loc 1 420 0 discriminator 1
+ 855 034c 7695      		lsr r23
+ 856 034e 6795      		ror r22
+ 857 0350 5795      		ror r21
+ 858 0352 4795      		ror r20
+ 859               	.LVL71:
+ 418:Lib/Print.cpp **** 	do {
+ 860               		.loc 1 418 0 discriminator 1
+ 861 0354 4115      		cp r20,__zero_reg__
+ 862 0356 5105      		cpc r21,__zero_reg__
+ 863 0358 6105      		cpc r22,__zero_reg__
+ 864 035a 7105      		cpc r23,__zero_reg__
+ 865 035c 01F4      		brne .L32
+ 421:Lib/Print.cpp **** 	} while (n);
+ 422:Lib/Print.cpp **** #if ARDUINO >= 100
+ 423:Lib/Print.cpp **** 	return write(p, sizeof(buf)-1 - (p - buf));
+ 866               		.loc 1 423 0
+ 867 035e FC01      		movw r30,r24
+ 868 0360 2081      		ld r18,Z
+ 869 0362 3181      		ldd r19,Z+1
+ 870 0364 AE01      		movw r20,r28
+ 871               	.LVL72:
+ 872 0366 4A1B      		sub r20,r26
+ 873 0368 5B0B      		sbc r21,r27
+ 874 036a 405E      		subi r20,-32
+ 875 036c 5F4F      		sbci r21,-1
+ 876 036e F901      		movw r30,r18
+ 877 0370 2281      		ldd r18,Z+2
+ 878 0372 3381      		ldd r19,Z+3
+ 879 0374 BD01      		movw r22,r26
+ 880 0376 F901      		movw r30,r18
+ 881 0378 0995      		icall
+ 882               	.LVL73:
+ 883               	/* epilogue start */
+ 884               	.LBE28:
+ 424:Lib/Print.cpp **** #else
+ 425:Lib/Print.cpp **** 	write(p, sizeof(buf)-1 - (p - buf));
+ 426:Lib/Print.cpp **** #endif
+ 427:Lib/Print.cpp **** }
+ 885               		.loc 1 427 0
+ 886 037a A096      		adiw r28,32
+ 887 037c 0FB6      		in __tmp_reg__,__SREG__
+ 888 037e F894      		cli
+ 889 0380 DEBF      		out __SP_H__,r29
+ 890 0382 0FBE      		out __SREG__,__tmp_reg__
+ 891 0384 CDBF      		out __SP_L__,r28
+ 892 0386 DF91      		pop r29
+ 893 0388 CF91      		pop r28
+ 894 038a 0895      		ret
+ 895               		.cfi_endproc
+ 896               	.LFE60:
+ 898               	.global	_ZN5Print14printNumberAnyEmh
+ 900               	_ZN5Print14printNumberAnyEmh:
+ 901               	.LFB61:
+ 428:Lib/Print.cpp **** 
+ 429:Lib/Print.cpp **** #if ARDUINO >= 100
+ 430:Lib/Print.cpp **** size_t Print::printNumberAny(unsigned long n, uint8_t base)
+ 431:Lib/Print.cpp **** #else
+ 432:Lib/Print.cpp **** void Print::printNumberAny(unsigned long n, uint8_t base)
+ 433:Lib/Print.cpp **** #endif
+ 434:Lib/Print.cpp **** {
+ 902               		.loc 1 434 0
+ 903               		.cfi_startproc
+ 904               	.LVL74:
+ 905 038c 8F92      		push r8
+ 906               	.LCFI46:
+ 907               		.cfi_def_cfa_offset 3
+ 908               		.cfi_offset 8, -2
+ 909 038e 9F92      		push r9
+ 910               	.LCFI47:
+ 911               		.cfi_def_cfa_offset 4
+ 912               		.cfi_offset 9, -3
+ 913 0390 AF92      		push r10
+ 914               	.LCFI48:
+ 915               		.cfi_def_cfa_offset 5
+ 916               		.cfi_offset 10, -4
+ 917 0392 BF92      		push r11
+ 918               	.LCFI49:
+ 919               		.cfi_def_cfa_offset 6
+ 920               		.cfi_offset 11, -5
+ 921 0394 CF92      		push r12
+ 922               	.LCFI50:
+ 923               		.cfi_def_cfa_offset 7
+ 924               		.cfi_offset 12, -6
+ 925 0396 DF92      		push r13
+ 926               	.LCFI51:
+ 927               		.cfi_def_cfa_offset 8
+ 928               		.cfi_offset 13, -7
+ 929 0398 EF92      		push r14
+ 930               	.LCFI52:
+ 931               		.cfi_def_cfa_offset 9
+ 932               		.cfi_offset 14, -8
+ 933 039a FF92      		push r15
+ 934               	.LCFI53:
+ 935               		.cfi_def_cfa_offset 10
+ 936               		.cfi_offset 15, -9
+ 937 039c 0F93      		push r16
+ 938               	.LCFI54:
+ 939               		.cfi_def_cfa_offset 11
+ 940               		.cfi_offset 16, -10
+ 941 039e 1F93      		push r17
+ 942               	.LCFI55:
+ 943               		.cfi_def_cfa_offset 12
+ 944               		.cfi_offset 17, -11
+ 945 03a0 CF93      		push r28
+ 946               	.LCFI56:
+ 947               		.cfi_def_cfa_offset 13
+ 948               		.cfi_offset 28, -12
+ 949 03a2 DF93      		push r29
+ 950               	.LCFI57:
+ 951               		.cfi_def_cfa_offset 14
+ 952               		.cfi_offset 29, -13
+ 953 03a4 CDB7      		in r28,__SP_L__
+ 954 03a6 DEB7      		in r29,__SP_H__
+ 955               	.LCFI58:
+ 956               		.cfi_def_cfa_register 28
+ 957 03a8 6597      		sbiw r28,21
+ 958               	.LCFI59:
+ 959               		.cfi_def_cfa_offset 35
+ 960 03aa 0FB6      		in __tmp_reg__,__SREG__
+ 961 03ac F894      		cli
+ 962 03ae DEBF      		out __SP_H__,r29
+ 963 03b0 0FBE      		out __SREG__,__tmp_reg__
+ 964 03b2 CDBF      		out __SP_L__,r28
+ 965               	/* prologue: function */
+ 966               	/* frame size = 21 */
+ 967               	/* stack size = 33 */
+ 968               	.L__stack_usage = 33
+ 969 03b4 7C01      		movw r14,r24
+ 970 03b6 D42E      		mov r13,r20
+ 971 03b8 E52F      		mov r30,r21
+ 972 03ba CB01      		movw r24,r22
+ 973               	.LVL75:
+ 974 03bc C22E      		mov r12,r18
+ 975               	.LVL76:
+ 976               	.LBB29:
+ 435:Lib/Print.cpp **** 	uint8_t digit, buf[21], *p;
+ 436:Lib/Print.cpp **** 	uint32_t tmp;
+ 437:Lib/Print.cpp **** 	//uint32_t usec;
+ 438:Lib/Print.cpp **** 
+ 439:Lib/Print.cpp **** 	//usec = micros();
+ 440:Lib/Print.cpp **** 	p = buf + (sizeof(buf)-1);
+ 977               		.loc 1 440 0
+ 978 03be 8E01      		movw r16,r28
+ 979 03c0 0B5E      		subi r16,-21
+ 980 03c2 1F4F      		sbci r17,-1
+ 441:Lib/Print.cpp **** 	do {
+ 442:Lib/Print.cpp **** 		tmp = n;
+ 443:Lib/Print.cpp **** 		n = n / base;
+ 981               		.loc 1 443 0
+ 982 03c4 822E      		mov r8,r18
+ 983 03c6 912C      		mov r9,__zero_reg__
+ 984 03c8 A12C      		mov r10,__zero_reg__
+ 985 03ca B12C      		mov r11,__zero_reg__
+ 986               	.LVL77:
+ 987               	.L37:
+ 988 03cc 6D2D      		mov r22,r13
+ 989 03ce 7E2F      		mov r23,r30
+ 990 03d0 A501      		movw r20,r10
+ 991 03d2 9401      		movw r18,r8
+ 992 03d4 0E94 0000 		call __udivmodsi4
+ 993               	.LVL78:
+ 444:Lib/Print.cpp **** 		digit = tmp - n * base;
+ 994               		.loc 1 444 0
+ 995 03d8 8D2D      		mov r24,r13
+ 996               	.LVL79:
+ 997 03da C29E      		mul r12,r18
+ 998 03dc 8019      		sub r24,r0
+ 999 03de 1124      		clr __zero_reg__
+ 1000               	.LVL80:
+ 445:Lib/Print.cpp **** 		*--p = (digit < 10) ? '0' + digit : 'A' + digit - 10;
+ 1001               		.loc 1 445 0
+ 1002 03e0 0150      		subi r16,1
+ 1003 03e2 1109      		sbc r17,__zero_reg__
+ 1004               	.LVL81:
+ 1005 03e4 8A30      		cpi r24,lo8(10)
+ 1006 03e6 00F4      		brsh .L34
+ 1007               		.loc 1 445 0 is_stmt 0 discriminator 1
+ 1008 03e8 805D      		subi r24,lo8(-(48))
+ 1009               	.LVL82:
+ 1010 03ea 00C0      		rjmp .L35
+ 1011               	.LVL83:
+ 1012               	.L34:
+ 1013               		.loc 1 445 0 discriminator 2
+ 1014 03ec 895C      		subi r24,lo8(-(55))
+ 1015               	.LVL84:
+ 1016               	.L35:
+ 1017               		.loc 1 445 0 discriminator 3
+ 1018 03ee D801      		movw r26,r16
+ 1019 03f0 8C93      		st X,r24
+ 441:Lib/Print.cpp **** 	do {
+ 1020               		.loc 1 441 0 is_stmt 1 discriminator 3
+ 1021 03f2 2115      		cp r18,__zero_reg__
+ 1022 03f4 3105      		cpc r19,__zero_reg__
+ 1023 03f6 4105      		cpc r20,__zero_reg__
+ 1024 03f8 5105      		cpc r21,__zero_reg__
+ 1025 03fa 01F0      		breq .L36
+ 443:Lib/Print.cpp **** 		n = n / base;
+ 1026               		.loc 1 443 0
+ 1027 03fc D22E      		mov r13,r18
+ 1028               	.LVL85:
+ 1029 03fe E32F      		mov r30,r19
+ 1030 0400 CA01      		movw r24,r20
+ 1031 0402 00C0      		rjmp .L37
+ 1032               	.LVL86:
+ 1033               	.L36:
+ 446:Lib/Print.cpp **** 	} while (n);
+ 447:Lib/Print.cpp **** 	//usec_print += micros() - usec;
+ 448:Lib/Print.cpp **** #if ARDUINO >= 100
+ 449:Lib/Print.cpp **** 	return write(p, sizeof(buf)-1 - (p - buf));
+ 1034               		.loc 1 449 0
+ 1035 0404 D701      		movw r26,r14
+ 1036 0406 ED91      		ld r30,X+
+ 1037 0408 FC91      		ld r31,X
+ 1038 040a AE01      		movw r20,r28
+ 1039 040c 401B      		sub r20,r16
+ 1040 040e 510B      		sbc r21,r17
+ 1041 0410 4B5E      		subi r20,-21
+ 1042 0412 5F4F      		sbci r21,-1
+ 1043 0414 0280      		ldd __tmp_reg__,Z+2
+ 1044 0416 F381      		ldd r31,Z+3
+ 1045 0418 E02D      		mov r30,__tmp_reg__
+ 1046 041a B801      		movw r22,r16
+ 1047 041c C701      		movw r24,r14
+ 1048 041e 0995      		icall
+ 1049               	.LVL87:
+ 1050               	/* epilogue start */
+ 1051               	.LBE29:
+ 450:Lib/Print.cpp **** #else
+ 451:Lib/Print.cpp **** 	write(p, sizeof(buf)-1 - (p - buf));
+ 452:Lib/Print.cpp **** #endif
+ 453:Lib/Print.cpp **** }
+ 1052               		.loc 1 453 0
+ 1053 0420 6596      		adiw r28,21
+ 1054 0422 0FB6      		in __tmp_reg__,__SREG__
+ 1055 0424 F894      		cli
+ 1056 0426 DEBF      		out __SP_H__,r29
+ 1057 0428 0FBE      		out __SREG__,__tmp_reg__
+ 1058 042a CDBF      		out __SP_L__,r28
+ 1059 042c DF91      		pop r29
+ 1060 042e CF91      		pop r28
+ 1061 0430 1F91      		pop r17
+ 1062 0432 0F91      		pop r16
+ 1063               	.LVL88:
+ 1064 0434 FF90      		pop r15
+ 1065 0436 EF90      		pop r14
+ 1066               	.LVL89:
+ 1067 0438 DF90      		pop r13
+ 1068 043a CF90      		pop r12
+ 1069 043c BF90      		pop r11
+ 1070 043e AF90      		pop r10
+ 1071 0440 9F90      		pop r9
+ 1072 0442 8F90      		pop r8
+ 1073               	.LVL90:
+ 1074 0444 0895      		ret
+ 1075               		.cfi_endproc
+ 1076               	.LFE61:
+ 1078               	.global	__ltsf2
+ 1079               	.global	__mulsf3
+ 1080               	.global	__addsf3
+ 1081               	.global	__fixunssfsi
+ 1082               	.global	__floatunsisf
+ 1083               	.global	__subsf3
+ 1084               	.global	__floatsisf
+ 1085               	.global	_ZN5Print10printFloatEdh
+ 1087               	_ZN5Print10printFloatEdh:
+ 1088               	.LFB62:
+ 454:Lib/Print.cpp **** 
+ 455:Lib/Print.cpp **** 
+ 456:Lib/Print.cpp **** 
+ 457:Lib/Print.cpp **** 
+ 458:Lib/Print.cpp **** #if ARDUINO >= 100
+ 459:Lib/Print.cpp **** size_t Print::printFloat(double number, uint8_t digits) 
+ 460:Lib/Print.cpp **** #else
+ 461:Lib/Print.cpp **** void Print::printFloat(double number, uint8_t digits) 
+ 462:Lib/Print.cpp **** #endif
+ 463:Lib/Print.cpp **** {
+ 1089               		.loc 1 463 0
+ 1090               		.cfi_startproc
+ 1091               	.LVL91:
+ 1092 0446 4F92      		push r4
+ 1093               	.LCFI60:
+ 1094               		.cfi_def_cfa_offset 3
+ 1095               		.cfi_offset 4, -2
+ 1096 0448 5F92      		push r5
+ 1097               	.LCFI61:
+ 1098               		.cfi_def_cfa_offset 4
+ 1099               		.cfi_offset 5, -3
+ 1100 044a 6F92      		push r6
+ 1101               	.LCFI62:
+ 1102               		.cfi_def_cfa_offset 5
+ 1103               		.cfi_offset 6, -4
+ 1104 044c 7F92      		push r7
+ 1105               	.LCFI63:
+ 1106               		.cfi_def_cfa_offset 6
+ 1107               		.cfi_offset 7, -5
+ 1108 044e 9F92      		push r9
+ 1109               	.LCFI64:
+ 1110               		.cfi_def_cfa_offset 7
+ 1111               		.cfi_offset 9, -6
+ 1112 0450 AF92      		push r10
+ 1113               	.LCFI65:
+ 1114               		.cfi_def_cfa_offset 8
+ 1115               		.cfi_offset 10, -7
+ 1116 0452 BF92      		push r11
+ 1117               	.LCFI66:
+ 1118               		.cfi_def_cfa_offset 9
+ 1119               		.cfi_offset 11, -8
+ 1120 0454 CF92      		push r12
+ 1121               	.LCFI67:
+ 1122               		.cfi_def_cfa_offset 10
+ 1123               		.cfi_offset 12, -9
+ 1124 0456 DF92      		push r13
+ 1125               	.LCFI68:
+ 1126               		.cfi_def_cfa_offset 11
+ 1127               		.cfi_offset 13, -10
+ 1128 0458 EF92      		push r14
+ 1129               	.LCFI69:
+ 1130               		.cfi_def_cfa_offset 12
+ 1131               		.cfi_offset 14, -11
+ 1132 045a FF92      		push r15
+ 1133               	.LCFI70:
+ 1134               		.cfi_def_cfa_offset 13
+ 1135               		.cfi_offset 15, -12
+ 1136 045c 0F93      		push r16
+ 1137               	.LCFI71:
+ 1138               		.cfi_def_cfa_offset 14
+ 1139               		.cfi_offset 16, -13
+ 1140 045e 1F93      		push r17
+ 1141               	.LCFI72:
+ 1142               		.cfi_def_cfa_offset 15
+ 1143               		.cfi_offset 17, -14
+ 1144 0460 CF93      		push r28
+ 1145               	.LCFI73:
+ 1146               		.cfi_def_cfa_offset 16
+ 1147               		.cfi_offset 28, -15
+ 1148 0462 DF93      		push r29
+ 1149               	.LCFI74:
+ 1150               		.cfi_def_cfa_offset 17
+ 1151               		.cfi_offset 29, -16
+ 1152 0464 CDB7      		in r28,__SP_L__
+ 1153 0466 DEB7      		in r29,__SP_H__
+ 1154               	.LCFI75:
+ 1155               		.cfi_def_cfa_register 28
+ 1156 0468 2897      		sbiw r28,8
+ 1157               	.LCFI76:
+ 1158               		.cfi_def_cfa_offset 25
+ 1159 046a 0FB6      		in __tmp_reg__,__SREG__
+ 1160 046c F894      		cli
+ 1161 046e DEBF      		out __SP_H__,r29
+ 1162 0470 0FBE      		out __SREG__,__tmp_reg__
+ 1163 0472 CDBF      		out __SP_L__,r28
+ 1164               	/* prologue: function */
+ 1165               	/* frame size = 8 */
+ 1166               	/* stack size = 23 */
+ 1167               	.L__stack_usage = 23
+ 1168 0474 8C01      		movw r16,r24
+ 1169 0476 6A01      		movw r12,r20
+ 1170 0478 7B01      		movw r14,r22
+ 1171 047a A22E      		mov r10,r18
+ 1172               	.LVL92:
+ 1173               	.LBB30:
+ 464:Lib/Print.cpp **** 	uint8_t sign=0;
+ 465:Lib/Print.cpp **** #if ARDUINO >= 100
+ 466:Lib/Print.cpp **** 	size_t count=0;
+ 467:Lib/Print.cpp **** #endif
+ 468:Lib/Print.cpp **** 
+ 469:Lib/Print.cpp **** 	// Handle negative numbers
+ 470:Lib/Print.cpp **** 	if (number < 0.0) {
+ 1174               		.loc 1 470 0
+ 1175 047c 20E0      		ldi r18,0
+ 1176 047e 30E0      		ldi r19,0
+ 1177 0480 A901      		movw r20,r18
+ 1178               	.LVL93:
+ 1179 0482 C701      		movw r24,r14
+ 1180 0484 B601      		movw r22,r12
+ 1181 0486 0E94 0000 		call __ltsf2
+ 1182               	.LVL94:
+ 1183 048a 87FF      		sbrs r24,7
+ 1184 048c 00C0      		rjmp .L52
+ 1185               	.LVL95:
+ 471:Lib/Print.cpp **** 		sign = 1;
+ 472:Lib/Print.cpp **** 		number = -number;
+ 1186               		.loc 1 472 0
+ 1187 048e F7FA      		bst r15,7
+ 1188 0490 F094      		com r15
+ 1189 0492 F7F8      		bld r15,7
+ 1190 0494 F094      		com r15
+ 1191               	.LVL96:
+ 471:Lib/Print.cpp **** 		sign = 1;
+ 1192               		.loc 1 471 0
+ 1193 0496 BB24      		clr r11
+ 1194 0498 B394      		inc r11
+ 1195 049a 00C0      		rjmp .L39
+ 1196               	.LVL97:
+ 1197               	.L52:
+ 464:Lib/Print.cpp **** 	uint8_t sign=0;
+ 1198               		.loc 1 464 0
+ 1199 049c B12C      		mov r11,__zero_reg__
+ 1200               	.LVL98:
+ 1201               	.L39:
+ 1202               	.LBB31:
+ 473:Lib/Print.cpp **** 	}
+ 474:Lib/Print.cpp **** 
+ 475:Lib/Print.cpp **** 	// Round correctly so that print(1.999, 2) prints as "2.00"
+ 476:Lib/Print.cpp **** 	double rounding = 0.5;
+ 477:Lib/Print.cpp **** 	for (uint8_t i=0; i<digits; ++i) {
+ 1203               		.loc 1 477 0
+ 1204 049e 912C      		mov r9,__zero_reg__
+ 1205               	.LBE31:
+ 476:Lib/Print.cpp **** 	double rounding = 0.5;
+ 1206               		.loc 1 476 0
+ 1207 04a0 60E0      		ldi r22,0
+ 1208 04a2 70E0      		ldi r23,0
+ 1209 04a4 80E0      		ldi r24,0
+ 1210 04a6 9FE3      		ldi r25,lo8(63)
+ 1211               	.LVL99:
+ 1212               	.L41:
+ 1213               	.LBB32:
+ 1214               		.loc 1 477 0 discriminator 1
+ 1215 04a8 9A14      		cp r9,r10
+ 1216 04aa 01F0      		breq .L53
+ 478:Lib/Print.cpp **** 		rounding *= 0.1;
+ 1217               		.loc 1 478 0 discriminator 2
+ 1218 04ac 2DEC      		ldi r18,lo8(-51)
+ 1219 04ae 3CEC      		ldi r19,lo8(-52)
+ 1220 04b0 4CEC      		ldi r20,lo8(-52)
+ 1221 04b2 5DE3      		ldi r21,lo8(61)
+ 1222 04b4 0E94 0000 		call __mulsf3
+ 1223               	.LVL100:
+ 477:Lib/Print.cpp **** 	for (uint8_t i=0; i<digits; ++i) {
+ 1224               		.loc 1 477 0 discriminator 2
+ 1225 04b8 9394      		inc r9
+ 1226               	.LVL101:
+ 1227 04ba 00C0      		rjmp .L41
+ 1228               	.L53:
+ 1229               	.LBE32:
+ 479:Lib/Print.cpp **** 	}
+ 480:Lib/Print.cpp **** 	number += rounding;
+ 1230               		.loc 1 480 0
+ 1231 04bc 9B01      		movw r18,r22
+ 1232 04be AC01      		movw r20,r24
+ 1233 04c0 C701      		movw r24,r14
+ 1234 04c2 B601      		movw r22,r12
+ 1235               	.LVL102:
+ 1236 04c4 0E94 0000 		call __addsf3
+ 1237               	.LVL103:
+ 1238 04c8 6B01      		movw r12,r22
+ 1239 04ca 7C01      		movw r14,r24
+ 1240               	.LVL104:
+ 481:Lib/Print.cpp **** 
+ 482:Lib/Print.cpp **** 	// Extract the integer part of the number and print it
+ 483:Lib/Print.cpp **** 	unsigned long int_part = (unsigned long)number;
+ 1241               		.loc 1 483 0
+ 1242 04cc 0E94 0000 		call __fixunssfsi
+ 1243               	.LVL105:
+ 1244 04d0 2B01      		movw r4,r22
+ 1245 04d2 3C01      		movw r6,r24
+ 1246               	.LVL106:
+ 1247               	.LBB33:
+ 1248               	.LBB34:
+ 1249               		.loc 3 102 0
+ 1250 04d4 2B2D      		mov r18,r11
+ 1251 04d6 AB01      		movw r20,r22
+ 1252 04d8 BC01      		movw r22,r24
+ 1253 04da C801      		movw r24,r16
+ 1254 04dc 0E94 0000 		call _ZN5Print14printNumberDecEmh
+ 1255               	.LVL107:
+ 1256 04e0 5C01      		movw r10,r24
+ 1257               	.LVL108:
+ 1258               	.LBE34:
+ 1259               	.LBE33:
+ 1260               	.LBB35:
+ 484:Lib/Print.cpp **** 	double remainder = number - (double)int_part;
+ 485:Lib/Print.cpp **** #if ARDUINO >= 100
+ 486:Lib/Print.cpp **** 	count += printNumber(int_part, sign, 10);
+ 487:Lib/Print.cpp **** #else
+ 488:Lib/Print.cpp **** 	printNumber(int_part, sign, 10);
+ 489:Lib/Print.cpp **** #endif
+ 490:Lib/Print.cpp **** 
+ 491:Lib/Print.cpp **** 	// Print the decimal point, but only if there are digits beyond
+ 492:Lib/Print.cpp **** 	if (digits > 0) {
+ 1261               		.loc 1 492 0
+ 1262 04e2 9920      		tst r9
+ 1263 04e4 01F4      		brne .+2
+ 1264 04e6 00C0      		rjmp .L43
+ 1265               	.LBE35:
+ 484:Lib/Print.cpp **** 	double remainder = number - (double)int_part;
+ 1266               		.loc 1 484 0
+ 1267 04e8 C301      		movw r24,r6
+ 1268 04ea B201      		movw r22,r4
+ 1269 04ec 0E94 0000 		call __floatunsisf
+ 1270               	.LVL109:
+ 1271 04f0 9B01      		movw r18,r22
+ 1272 04f2 AC01      		movw r20,r24
+ 1273 04f4 C701      		movw r24,r14
+ 1274 04f6 B601      		movw r22,r12
+ 1275 04f8 0E94 0000 		call __subsf3
+ 1276               	.LVL110:
+ 1277               	.LBB37:
+ 1278               	.LBB36:
+ 493:Lib/Print.cpp **** 		uint8_t n, buf[8], count=1;
+ 494:Lib/Print.cpp **** 		buf[0] = '.';
+ 1279               		.loc 1 494 0
+ 1280 04fc 2EE2      		ldi r18,lo8(46)
+ 1281 04fe 2983      		std Y+1,r18
+ 1282 0500 292D      		mov r18,r9
+ 1283 0502 2830      		cpi r18,lo8(8)
+ 1284 0504 00F0      		brlo .L44
+ 1285 0506 27E0      		ldi r18,lo8(7)
+ 1286               	.L44:
+ 1287 0508 9924      		clr r9
+ 1288 050a 9394      		inc r9
+ 1289               	.LVL111:
+ 1290 050c 920E      		add r9,r18
+ 1291               	.LVL112:
+ 1292 050e 6624      		clr r6
+ 1293 0510 6394      		inc r6
+ 1294               	.LVL113:
+ 1295               	.L45:
+ 495:Lib/Print.cpp **** 
+ 496:Lib/Print.cpp **** 		// Extract digits from the remainder one at a time
+ 497:Lib/Print.cpp **** 		if (digits > sizeof(buf) - 1) digits = sizeof(buf) - 1;
+ 498:Lib/Print.cpp **** 
+ 499:Lib/Print.cpp **** 		while (digits-- > 0) {
+ 500:Lib/Print.cpp **** 			remainder *= 10.0;
+ 1296               		.loc 1 500 0
+ 1297 0512 20E0      		ldi r18,0
+ 1298 0514 30E0      		ldi r19,0
+ 1299 0516 40E2      		ldi r20,lo8(32)
+ 1300 0518 51E4      		ldi r21,lo8(65)
+ 1301 051a 0E94 0000 		call __mulsf3
+ 1302               	.LVL114:
+ 1303 051e 6B01      		movw r12,r22
+ 1304 0520 7C01      		movw r14,r24
+ 1305               	.LVL115:
+ 501:Lib/Print.cpp **** 			n = (uint8_t)(remainder);
+ 1306               		.loc 1 501 0
+ 1307 0522 0E94 0000 		call __fixunssfsi
+ 1308               	.LVL116:
+ 502:Lib/Print.cpp **** 			buf[count++] = '0' + n;
+ 1309               		.loc 1 502 0
+ 1310 0526 7724      		clr r7
+ 1311 0528 7394      		inc r7
+ 1312 052a 760C      		add r7,r6
+ 1313               	.LVL117:
+ 1314 052c E1E0      		ldi r30,lo8(1)
+ 1315 052e F0E0      		ldi r31,0
+ 1316 0530 EC0F      		add r30,r28
+ 1317 0532 FD1F      		adc r31,r29
+ 1318 0534 E60D      		add r30,r6
+ 1319 0536 F11D      		adc r31,__zero_reg__
+ 1320 0538 80E3      		ldi r24,lo8(48)
+ 1321 053a 860F      		add r24,r22
+ 1322 053c 8083      		st Z,r24
+ 503:Lib/Print.cpp **** 			remainder -= n; 
+ 1323               		.loc 1 503 0
+ 1324 053e 70E0      		ldi r23,0
+ 1325 0540 80E0      		ldi r24,0
+ 1326 0542 90E0      		ldi r25,0
+ 1327 0544 0E94 0000 		call __floatsisf
+ 1328               	.LVL118:
+ 1329 0548 9B01      		movw r18,r22
+ 1330 054a AC01      		movw r20,r24
+ 1331 054c C701      		movw r24,r14
+ 1332 054e B601      		movw r22,r12
+ 1333 0550 0E94 0000 		call __subsf3
+ 1334               	.LVL119:
+ 499:Lib/Print.cpp **** 		while (digits-- > 0) {
+ 1335               		.loc 1 499 0
+ 1336 0554 7914      		cp r7,r9
+ 1337 0556 01F0      		breq .L54
+ 502:Lib/Print.cpp **** 			buf[count++] = '0' + n;
+ 1338               		.loc 1 502 0
+ 1339 0558 672C      		mov r6,r7
+ 1340 055a 00C0      		rjmp .L45
+ 1341               	.L54:
+ 504:Lib/Print.cpp **** 		}
+ 505:Lib/Print.cpp **** #if ARDUINO >= 100
+ 506:Lib/Print.cpp **** 		count += write(buf, count);
+ 1342               		.loc 1 506 0
+ 1343 055c D801      		movw r26,r16
+ 1344 055e ED91      		ld r30,X+
+ 1345 0560 FC91      		ld r31,X
+ 1346 0562 492D      		mov r20,r9
+ 1347 0564 50E0      		ldi r21,0
+ 1348 0566 0280      		ldd __tmp_reg__,Z+2
+ 1349 0568 F381      		ldd r31,Z+3
+ 1350 056a E02D      		mov r30,__tmp_reg__
+ 1351 056c BE01      		movw r22,r28
+ 1352               	.LVL120:
+ 1353 056e 6F5F      		subi r22,-1
+ 1354 0570 7F4F      		sbci r23,-1
+ 1355 0572 C801      		movw r24,r16
+ 1356 0574 0995      		icall
+ 1357               	.LVL121:
+ 1358               	.L43:
+ 1359               	.LBE36:
+ 1360               	.LBE37:
+ 1361               	.LBE30:
+ 507:Lib/Print.cpp **** #else
+ 508:Lib/Print.cpp **** 		write(buf, count);
+ 509:Lib/Print.cpp **** #endif
+ 510:Lib/Print.cpp **** 	}
+ 511:Lib/Print.cpp **** #if ARDUINO >= 100
+ 512:Lib/Print.cpp **** 	return count;
+ 513:Lib/Print.cpp **** #endif
+ 514:Lib/Print.cpp **** }
+ 1362               		.loc 1 514 0
+ 1363 0576 C501      		movw r24,r10
+ 1364               	/* epilogue start */
+ 1365 0578 2896      		adiw r28,8
+ 1366 057a 0FB6      		in __tmp_reg__,__SREG__
+ 1367 057c F894      		cli
+ 1368 057e DEBF      		out __SP_H__,r29
+ 1369 0580 0FBE      		out __SREG__,__tmp_reg__
+ 1370 0582 CDBF      		out __SP_L__,r28
+ 1371 0584 DF91      		pop r29
+ 1372 0586 CF91      		pop r28
+ 1373 0588 1F91      		pop r17
+ 1374 058a 0F91      		pop r16
+ 1375               	.LVL122:
+ 1376 058c FF90      		pop r15
+ 1377 058e EF90      		pop r14
+ 1378 0590 DF90      		pop r13
+ 1379 0592 CF90      		pop r12
+ 1380 0594 BF90      		pop r11
+ 1381               	.LVL123:
+ 1382 0596 AF90      		pop r10
+ 1383               	.LVL124:
+ 1384 0598 9F90      		pop r9
+ 1385 059a 7F90      		pop r7
+ 1386 059c 6F90      		pop r6
+ 1387 059e 5F90      		pop r5
+ 1388 05a0 4F90      		pop r4
+ 1389               	.LVL125:
+ 1390 05a2 0895      		ret
+ 1391               		.cfi_endproc
+ 1392               	.LFE62:
+ 1394               	.Letext0:
+ 1395               		.file 4 "/usr/lib/avr/include/stdint.h"
+ 1396               		.file 5 "/usr/lib/gcc/avr/4.8.2/include/stdarg.h"
+ 1397               		.file 6 "/usr/lib/gcc/avr/4.8.2/include/stddef.h"
+ 1398               		.file 7 "/usr/lib/avr/include/stdio.h"
+ 1399               		.file 8 "Lib/core_pins.h"
+DEFINED SYMBOLS
+                            *ABS*:00000000 Print.cpp
+     /tmp/ccfCrGeY.s:2      *ABS*:0000003e __SP_H__
+     /tmp/ccfCrGeY.s:3      *ABS*:0000003d __SP_L__
+     /tmp/ccfCrGeY.s:4      *ABS*:0000003f __SREG__
+     /tmp/ccfCrGeY.s:5      *ABS*:0000003b __RAMPZ__
+     /tmp/ccfCrGeY.s:6      *ABS*:00000000 __tmp_reg__
+     /tmp/ccfCrGeY.s:7      *ABS*:00000001 __zero_reg__
+     /tmp/ccfCrGeY.s:12     .text:00000000 _ZL14printf_putcharcP6__file
+     /tmp/ccfCrGeY.s:47     .text:0000001e _ZN5Print5writeEPKhj
+     /tmp/ccfCrGeY.s:144    .text:0000006e _ZN5Print5printEPK19__FlashStringHelper
+     /tmp/ccfCrGeY.s:315    .text:00000114 _ZN5Print7printlnEv
+     /tmp/ccfCrGeY.s:372    .text:00000148 _ZN5Print6printfEPKcz
+     /tmp/ccfCrGeY.s:444    .text:00000198 _ZN5Print6printfEPK19__FlashStringHelperz
+     /tmp/ccfCrGeY.s:516    .text:000001e8 _ZN5Print14printNumberDecEmh
+     /tmp/ccfCrGeY.s:659    .text:000002a0 _ZN5Print5printEl
+     /tmp/ccfCrGeY.s:705    .text:000002bc _ZN5Print14printNumberHexEm
+     /tmp/ccfCrGeY.s:812    .text:0000032c _ZN5Print14printNumberBinEm
+     /tmp/ccfCrGeY.s:900    .text:0000038c _ZN5Print14printNumberAnyEmh
+     /tmp/ccfCrGeY.s:1087   .text:00000446 _ZN5Print10printFloatEdh
+
+UNDEFINED SYMBOLS
+__strlen_P
+memcpy_P
+vfprintf
+vfprintf_P
+__udivmodsi4
+__ltsf2
+__mulsf3
+__addsf3
+__fixunssfsi
+__floatunsisf
+__subsf3
+__floatsisf

@@ -1,0 +1,157 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity" >
+	<TabHost
+        android:id="@+id/tabHost"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent" >
+        <TabWidget
+            android:id="@android:id/tabs"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content" />
+        <FrameLayout
+            android:id="@android:id/tabcontent"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:paddingTop="100px" >
+            
+			<!-- Layout for control view -->
+			<RelativeLayout
+			    android:layout_width="match_parent"
+			    android:layout_height="match_parent"
+			    tools:context=".MainActivity"
+			    android:id="@+id/controlView">
+			    
+			    <ImageView
+			        android:id="@+id/image"
+			        android:layout_width="wrap_content"
+			        android:layout_height="wrap_content"
+			        android:layout_alignParentTop="true"
+			        android:layout_centerHorizontal="true"
+			        android:layout_marginTop="40dp"
+			        android:gravity="center"
+			        android:src="@drawable/pulse" />
+
+			  	<TextView
+			        android:id="@+id/state"
+			        android:layout_width="fill_parent"
+			        android:layout_height="wrap_content"
+			        android:layout_below="@id/image"
+			        android:gravity="center"
+			        android:text="Connection State"
+			        android:textAppearance="?android:attr/textAppearanceLarge" />
+			    
+			    <Button
+			        android:id="@+id/connect"
+			        android:layout_width="fill_parent"
+			        android:layout_height="wrap_content"
+			        android:layout_alignParentLeft="true"
+			        android:layout_below="@id/state"
+   			        android:layout_marginTop="60dp"
+			        android:layout_weight="0.3"
+			        android:padding="30dp"
+			        android:text="Connect" />
+
+   			    <Button
+   			        android:id="@+id/disconnect"
+   			        android:layout_width="fill_parent"
+   			        android:layout_height="wrap_content"
+   			        android:layout_alignParentLeft="true"
+   			        android:layout_below="@+id/connect"
+   			        android:layout_marginTop="23dp"
+   			        android:layout_weight="0.3"
+   			        android:padding="30dp"
+   			        android:text="Disconnect" />
+
+			</RelativeLayout>
+            
+			<!-- Layout for command view -->
+			<RelativeLayout
+			    android:layout_width="match_parent"
+			    android:layout_height="match_parent"
+			    tools:context=".MainActivity" 
+			    android:id="@+id/commandView">
+			
+			    <AutoCompleteTextView
+			        android:id="@+id/commandInput"
+			        android:layout_width="fill_parent"
+			        android:layout_height="wrap_content"
+			        android:layout_alignParentBottom="true"
+			        android:layout_alignParentLeft="true"
+			        android:hint="Input commands"
+			        android:singleLine="true"
+			        android:focusableInTouchMode="true"
+			        android:focusable="true"
+			        android:ems="10" />
+			
+			    <RelativeLayout
+			        android:layout_width="match_parent"
+			        android:layout_height="match_parent"
+			        android:layout_above="@+id/commandInput"
+			        android:layout_alignParentLeft="true" >
+			
+			        <ScrollView
+			            android:id="@+id/scrollview"
+			            android:layout_width="fill_parent"
+			            android:layout_height="wrap_content"
+				        android:focusableInTouchMode="false"
+				        android:focusable="false"
+			            android:fillViewport="true" >
+			
+			            <TextView
+			                android:id="@+id/dataview"
+			                android:layout_width="fill_parent"
+			                android:layout_height="wrap_content"
+       				        android:focusableInTouchMode="false"
+					        android:focusable="false" />
+			        </ScrollView>
+			    </RelativeLayout>
+			</RelativeLayout>
+			
+			<!-- Layout for key view -->
+			<RelativeLayout
+			    android:layout_width="match_parent"
+			    android:layout_height="match_parent"
+			    tools:context=".MainActivity" 
+			    android:id="@+id/keyView">
+			
+			    <AutoCompleteTextView
+			        android:id="@+id/keyInput"
+			        android:layout_width="fill_parent"
+			        android:layout_height="wrap_content"
+			        android:layout_alignParentBottom="true"
+			        android:layout_alignParentLeft="true"
+			        android:hint="Input keys"
+			        android:singleLine="true"
+			        android:focusableInTouchMode="true"
+			        android:focusable="true"
+			        android:ems="10" />
+			
+			    <RelativeLayout
+			        android:layout_width="match_parent"
+			        android:layout_height="match_parent"
+			        android:layout_above="@+id/keyInput"
+			        android:layout_alignParentLeft="true" >
+			
+			        <ScrollView
+			            android:id="@+id/scrollview"
+			            android:layout_width="fill_parent"
+			            android:layout_height="wrap_content"
+				        android:focusableInTouchMode="false"
+				        android:focusable="false"
+			            android:fillViewport="true" >
+			
+			            <TextView
+			                android:id="@+id/dataview"
+			                android:layout_width="fill_parent"
+			                android:layout_height="wrap_content"
+       				        android:focusableInTouchMode="false"
+					        android:focusable="false" />
+			        </ScrollView>
+			    </RelativeLayout>
+			</RelativeLayout>			
+		</FrameLayout>
+    </TabHost>    
+</LinearLayout>

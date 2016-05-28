@@ -1,0 +1,2951 @@
+   1               		.file	"HardwareSerial.cpp"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__RAMPZ__ = 0x3b
+   6               	__tmp_reg__ = 0
+   7               	__zero_reg__ = 1
+   8               		.text
+   9               	.Ltext0:
+  10               		.cfi_sections	.debug_frame
+  11               	.global	_ZN14HardwareSerial9availableEv
+  13               	_ZN14HardwareSerial9availableEv:
+  14               	.LFB64:
+  15               		.file 1 "Lib/HardwareSerial.cpp"
+   1:Lib/HardwareSerial.cpp **** /* UART (hardware serial) for Teensy & Teensy++
+   2:Lib/HardwareSerial.cpp ****  * http://www.pjrc.com/teensy/
+   3:Lib/HardwareSerial.cpp ****  * Copyright (c) 2008 PJRC.COM, LLC
+   4:Lib/HardwareSerial.cpp ****  * 
+   5:Lib/HardwareSerial.cpp ****  * Permission is hereby granted, free of charge, to any person obtaining a copy
+   6:Lib/HardwareSerial.cpp ****  * of this software and associated documentation files (the "Software"), to deal
+   7:Lib/HardwareSerial.cpp ****  * in the Software without restriction, including without limitation the rights
+   8:Lib/HardwareSerial.cpp ****  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   9:Lib/HardwareSerial.cpp ****  * copies of the Software, and to permit persons to whom the Software is
+  10:Lib/HardwareSerial.cpp ****  * furnished to do so, subject to the following conditions:
+  11:Lib/HardwareSerial.cpp ****  * 
+  12:Lib/HardwareSerial.cpp ****  * The above copyright notice and this permission notice shall be included in
+  13:Lib/HardwareSerial.cpp ****  * all copies or substantial portions of the Software.
+  14:Lib/HardwareSerial.cpp ****  * 
+  15:Lib/HardwareSerial.cpp ****  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  16:Lib/HardwareSerial.cpp ****  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  17:Lib/HardwareSerial.cpp ****  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  18:Lib/HardwareSerial.cpp ****  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  19:Lib/HardwareSerial.cpp ****  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  20:Lib/HardwareSerial.cpp ****  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  21:Lib/HardwareSerial.cpp ****  * THE SOFTWARE.
+  22:Lib/HardwareSerial.cpp ****  */
+  23:Lib/HardwareSerial.cpp **** 
+  24:Lib/HardwareSerial.cpp **** #include <avr/io.h>
+  25:Lib/HardwareSerial.cpp **** #include <avr/interrupt.h>
+  26:Lib/HardwareSerial.cpp **** #include <string.h>
+  27:Lib/HardwareSerial.cpp **** #include "core_pins.h"
+  28:Lib/HardwareSerial.cpp **** #include "HardwareSerial.h"
+  29:Lib/HardwareSerial.cpp **** 
+  30:Lib/HardwareSerial.cpp **** #define RX_BUFFER_SIZE 64
+  31:Lib/HardwareSerial.cpp **** static volatile uint8_t rx_buffer[RX_BUFFER_SIZE];
+  32:Lib/HardwareSerial.cpp **** static volatile uint8_t rx_buffer_head = 0;
+  33:Lib/HardwareSerial.cpp **** static volatile uint8_t rx_buffer_tail = 0;
+  34:Lib/HardwareSerial.cpp **** 
+  35:Lib/HardwareSerial.cpp **** #define TX_BUFFER_SIZE 40
+  36:Lib/HardwareSerial.cpp **** static volatile uint8_t tx_buffer[TX_BUFFER_SIZE];
+  37:Lib/HardwareSerial.cpp **** static volatile uint8_t tx_buffer_head = 0;
+  38:Lib/HardwareSerial.cpp **** static volatile uint8_t tx_buffer_tail = 0;
+  39:Lib/HardwareSerial.cpp **** static volatile uint8_t transmitting = 0;
+  40:Lib/HardwareSerial.cpp **** static volatile uint8_t tx_enable_pin = 255;
+  41:Lib/HardwareSerial.cpp **** 
+  42:Lib/HardwareSerial.cpp **** // Public Methods //////////////////////////////////////////////////////////////
+  43:Lib/HardwareSerial.cpp **** 
+  44:Lib/HardwareSerial.cpp **** void HardwareSerial::_begin(uint16_t baud_count, uint8_t txen_pin)
+  45:Lib/HardwareSerial.cpp **** {
+  46:Lib/HardwareSerial.cpp **** 	tx_enable_pin = txen_pin;
+  47:Lib/HardwareSerial.cpp **** 	if (txen_pin < 255) {
+  48:Lib/HardwareSerial.cpp **** 		pinMode(txen_pin, OUTPUT);
+  49:Lib/HardwareSerial.cpp **** 		digitalWrite(txen_pin, LOW);
+  50:Lib/HardwareSerial.cpp **** 	}
+  51:Lib/HardwareSerial.cpp **** 	if ((baud_count & 1) && baud_count <= 4096) {
+  52:Lib/HardwareSerial.cpp **** 		UCSR1A = (1<<U2X1);
+  53:Lib/HardwareSerial.cpp **** 		UBRR1 = baud_count - 1;
+  54:Lib/HardwareSerial.cpp **** 	} else {
+  55:Lib/HardwareSerial.cpp **** 		UCSR1A = 0;
+  56:Lib/HardwareSerial.cpp **** 		UBRR1 = (baud_count >> 1) - 1;
+  57:Lib/HardwareSerial.cpp **** 	}
+  58:Lib/HardwareSerial.cpp **** 	if (!(UCSR1B & (1<<TXEN1))) {
+  59:Lib/HardwareSerial.cpp **** 		rx_buffer_head = 0;
+  60:Lib/HardwareSerial.cpp **** 		rx_buffer_tail = 0;
+  61:Lib/HardwareSerial.cpp **** 		tx_buffer_head = 0;
+  62:Lib/HardwareSerial.cpp **** 		tx_buffer_tail = 0;
+  63:Lib/HardwareSerial.cpp **** 		transmitting = 0;
+  64:Lib/HardwareSerial.cpp **** 		UCSR1C = (1<<UCSZ11) | (1<<UCSZ10);
+  65:Lib/HardwareSerial.cpp **** 		UCSR1B = (1<<RXEN1) | (1<<TXCIE1) | (1<<TXEN1) | (1<<RXCIE1);
+  66:Lib/HardwareSerial.cpp **** 	}
+  67:Lib/HardwareSerial.cpp **** }
+  68:Lib/HardwareSerial.cpp **** 
+  69:Lib/HardwareSerial.cpp **** void HardwareSerial::end(void) 
+  70:Lib/HardwareSerial.cpp **** {
+  71:Lib/HardwareSerial.cpp **** 	while (transmitting) ;	// wait for buffered data to send
+  72:Lib/HardwareSerial.cpp **** 	UCSR1B = 0;
+  73:Lib/HardwareSerial.cpp **** 	rx_buffer_head = 0;
+  74:Lib/HardwareSerial.cpp **** 	rx_buffer_tail = 0;
+  75:Lib/HardwareSerial.cpp **** }
+  76:Lib/HardwareSerial.cpp **** 
+  77:Lib/HardwareSerial.cpp **** void HardwareSerial::transmitterEnable(uint8_t pin)
+  78:Lib/HardwareSerial.cpp **** {
+  79:Lib/HardwareSerial.cpp **** 	while (transmitting) ;
+  80:Lib/HardwareSerial.cpp **** 	pinMode(pin, OUTPUT);
+  81:Lib/HardwareSerial.cpp **** 	digitalWrite(pin, LOW);
+  82:Lib/HardwareSerial.cpp **** 	tx_enable_pin = pin;
+  83:Lib/HardwareSerial.cpp **** }
+  84:Lib/HardwareSerial.cpp **** 
+  85:Lib/HardwareSerial.cpp **** int HardwareSerial::available(void)
+  86:Lib/HardwareSerial.cpp **** {
+  16               		.loc 1 86 0
+  17               		.cfi_startproc
+  18               	.LVL0:
+  19               	/* prologue: function */
+  20               	/* frame size = 0 */
+  21               	/* stack size = 0 */
+  22               	.L__stack_usage = 0
+  23               	.LBB53:
+  87:Lib/HardwareSerial.cpp **** 	uint8_t head, tail;
+  88:Lib/HardwareSerial.cpp **** 
+  89:Lib/HardwareSerial.cpp **** 	head = rx_buffer_head;
+  24               		.loc 1 89 0
+  25 0000 5091 0000 		lds r21,_ZL14rx_buffer_head
+  26               	.LVL1:
+  90:Lib/HardwareSerial.cpp **** 	tail = rx_buffer_tail;
+  27               		.loc 1 90 0
+  28 0004 4091 0000 		lds r20,_ZL14rx_buffer_tail
+  29               	.LVL2:
+  30 0008 852F      		mov r24,r21
+  31               	.LVL3:
+  32 000a 90E0      		ldi r25,0
+  33 000c 242F      		mov r18,r20
+  34 000e 30E0      		ldi r19,0
+  91:Lib/HardwareSerial.cpp **** 	if (head >= tail) return head - tail;
+  35               		.loc 1 91 0
+  36 0010 5417      		cp r21,r20
+  37 0012 00F4      		brsh .L4
+  92:Lib/HardwareSerial.cpp **** 	return RX_BUFFER_SIZE + head - tail;
+  38               		.loc 1 92 0
+  39 0014 805C      		subi r24,-64
+  40 0016 9F4F      		sbci r25,-1
+  41               	.L4:
+  42 0018 821B      		sub r24,r18
+  43 001a 930B      		sbc r25,r19
+  44               	.LBE53:
+  93:Lib/HardwareSerial.cpp **** }
+  45               		.loc 1 93 0
+  46 001c 0895      		ret
+  47               		.cfi_endproc
+  48               	.LFE64:
+  50               	.global	_ZN14HardwareSerial4peekEv
+  52               	_ZN14HardwareSerial4peekEv:
+  53               	.LFB65:
+  94:Lib/HardwareSerial.cpp **** 
+  95:Lib/HardwareSerial.cpp **** int HardwareSerial::peek(void)
+  96:Lib/HardwareSerial.cpp **** {
+  54               		.loc 1 96 0
+  55               		.cfi_startproc
+  56               	.LVL4:
+  57               	/* prologue: function */
+  58               	/* frame size = 0 */
+  59               	/* stack size = 0 */
+  60               	.L__stack_usage = 0
+  61               	.LBB54:
+  97:Lib/HardwareSerial.cpp **** 	uint8_t head, tail;
+  98:Lib/HardwareSerial.cpp **** 
+  99:Lib/HardwareSerial.cpp **** 	head = rx_buffer_head;
+  62               		.loc 1 99 0
+  63 001e 8091 0000 		lds r24,_ZL14rx_buffer_head
+  64               	.LVL5:
+ 100:Lib/HardwareSerial.cpp **** 	tail = rx_buffer_tail;
+  65               		.loc 1 100 0
+  66 0022 E091 0000 		lds r30,_ZL14rx_buffer_tail
+  67               	.LVL6:
+ 101:Lib/HardwareSerial.cpp **** 	if (head == tail) return -1;
+  68               		.loc 1 101 0
+  69 0026 8E17      		cp r24,r30
+  70 0028 01F0      		breq .L9
+ 102:Lib/HardwareSerial.cpp **** 	if (++tail >= RX_BUFFER_SIZE) tail = 0;
+  71               		.loc 1 102 0
+  72 002a EF5F      		subi r30,lo8(-(1))
+  73               	.LVL7:
+  74 002c E034      		cpi r30,lo8(64)
+  75 002e 00F0      		brlo .L8
+  76 0030 E0E0      		ldi r30,0
+  77               	.LVL8:
+  78               	.L8:
+ 103:Lib/HardwareSerial.cpp **** 	return rx_buffer[tail];
+  79               		.loc 1 103 0
+  80 0032 F0E0      		ldi r31,0
+  81 0034 E050      		subi r30,lo8(-(_ZL9rx_buffer))
+  82 0036 F040      		sbci r31,hi8(-(_ZL9rx_buffer))
+  83               	.LVL9:
+  84 0038 8081      		ld r24,Z
+  85               	.LVL10:
+  86 003a 90E0      		ldi r25,0
+  87 003c 0895      		ret
+  88               	.LVL11:
+  89               	.L9:
+ 101:Lib/HardwareSerial.cpp **** 	if (head == tail) return -1;
+  90               		.loc 1 101 0
+  91 003e 8FEF      		ldi r24,lo8(-1)
+  92 0040 9FEF      		ldi r25,lo8(-1)
+  93               	.LVL12:
+  94               	.LBE54:
+ 104:Lib/HardwareSerial.cpp **** }
+  95               		.loc 1 104 0
+  96 0042 0895      		ret
+  97               		.cfi_endproc
+  98               	.LFE65:
+ 100               	.global	_ZN14HardwareSerial4readEv
+ 102               	_ZN14HardwareSerial4readEv:
+ 103               	.LFB66:
+ 105:Lib/HardwareSerial.cpp **** 
+ 106:Lib/HardwareSerial.cpp **** int HardwareSerial::read(void)
+ 107:Lib/HardwareSerial.cpp **** {
+ 104               		.loc 1 107 0
+ 105               		.cfi_startproc
+ 106               	.LVL13:
+ 107               	/* prologue: function */
+ 108               	/* frame size = 0 */
+ 109               	/* stack size = 0 */
+ 110               	.L__stack_usage = 0
+ 111               	.LBB55:
+ 108:Lib/HardwareSerial.cpp **** 	uint8_t c, i;
+ 109:Lib/HardwareSerial.cpp **** 
+ 110:Lib/HardwareSerial.cpp **** 	if (rx_buffer_head == rx_buffer_tail) return -1;
+ 112               		.loc 1 110 0
+ 113 0044 9091 0000 		lds r25,_ZL14rx_buffer_head
+ 114 0048 8091 0000 		lds r24,_ZL14rx_buffer_tail
+ 115               	.LVL14:
+ 116 004c 9817      		cp r25,r24
+ 117 004e 01F0      		breq .L14
+ 111:Lib/HardwareSerial.cpp **** 	i = rx_buffer_tail + 1;
+ 118               		.loc 1 111 0
+ 119 0050 9091 0000 		lds r25,_ZL14rx_buffer_tail
+ 120 0054 9F5F      		subi r25,lo8(-(1))
+ 121               	.LVL15:
+ 112:Lib/HardwareSerial.cpp **** 	if (i >= RX_BUFFER_SIZE) i = 0;
+ 122               		.loc 1 112 0
+ 123 0056 9034      		cpi r25,lo8(64)
+ 124 0058 00F0      		brlo .L13
+ 125 005a 90E0      		ldi r25,0
+ 126               	.LVL16:
+ 127               	.L13:
+ 113:Lib/HardwareSerial.cpp **** 	c = rx_buffer[i];
+ 128               		.loc 1 113 0
+ 129 005c E92F      		mov r30,r25
+ 130 005e F0E0      		ldi r31,0
+ 131 0060 E050      		subi r30,lo8(-(_ZL9rx_buffer))
+ 132 0062 F040      		sbci r31,hi8(-(_ZL9rx_buffer))
+ 133 0064 8081      		ld r24,Z
+ 134               	.LVL17:
+ 114:Lib/HardwareSerial.cpp **** 	rx_buffer_tail = i;
+ 135               		.loc 1 114 0
+ 136 0066 9093 0000 		sts _ZL14rx_buffer_tail,r25
+ 115:Lib/HardwareSerial.cpp **** 	return c;
+ 137               		.loc 1 115 0
+ 138 006a 90E0      		ldi r25,0
+ 139               	.LVL18:
+ 140 006c 0895      		ret
+ 141               	.LVL19:
+ 142               	.L14:
+ 110:Lib/HardwareSerial.cpp **** 	if (rx_buffer_head == rx_buffer_tail) return -1;
+ 143               		.loc 1 110 0
+ 144 006e 8FEF      		ldi r24,lo8(-1)
+ 145 0070 9FEF      		ldi r25,lo8(-1)
+ 146               	.LBE55:
+ 116:Lib/HardwareSerial.cpp **** }
+ 147               		.loc 1 116 0
+ 148 0072 0895      		ret
+ 149               		.cfi_endproc
+ 150               	.LFE66:
+ 152               	.global	_ZN14HardwareSerial5flushEv
+ 154               	_ZN14HardwareSerial5flushEv:
+ 155               	.LFB67:
+ 117:Lib/HardwareSerial.cpp **** 
+ 118:Lib/HardwareSerial.cpp **** void HardwareSerial::flush()
+ 119:Lib/HardwareSerial.cpp **** {
+ 156               		.loc 1 119 0
+ 157               		.cfi_startproc
+ 158               	/* prologue: function */
+ 159               	/* frame size = 0 */
+ 160               	/* stack size = 0 */
+ 161               	.L__stack_usage = 0
+ 162               	.LVL20:
+ 163               	.L18:
+ 120:Lib/HardwareSerial.cpp **** #if ARDUINO >= 100
+ 121:Lib/HardwareSerial.cpp **** 	while (transmitting) ;	// wait for buffered data to send
+ 164               		.loc 1 121 0 discriminator 1
+ 165 0074 8091 0000 		lds r24,_ZL12transmitting
+ 166 0078 8111      		cpse r24,__zero_reg__
+ 167 007a 00C0      		rjmp .L18
+ 168               	/* epilogue start */
+ 122:Lib/HardwareSerial.cpp **** #else
+ 123:Lib/HardwareSerial.cpp **** 	rx_buffer_head = rx_buffer_tail;
+ 124:Lib/HardwareSerial.cpp **** #endif
+ 125:Lib/HardwareSerial.cpp **** }
+ 169               		.loc 1 125 0
+ 170 007c 0895      		ret
+ 171               		.cfi_endproc
+ 172               	.LFE67:
+ 174               	.global	_ZN14HardwareSerial5writeEh
+ 176               	_ZN14HardwareSerial5writeEh:
+ 177               	.LFB69:
+ 126:Lib/HardwareSerial.cpp **** 
+ 127:Lib/HardwareSerial.cpp **** void HardwareSerial::clear()
+ 128:Lib/HardwareSerial.cpp **** {
+ 129:Lib/HardwareSerial.cpp **** 	rx_buffer_head = rx_buffer_tail;
+ 130:Lib/HardwareSerial.cpp **** }
+ 131:Lib/HardwareSerial.cpp **** 
+ 132:Lib/HardwareSerial.cpp **** #if ARDUINO >= 100
+ 133:Lib/HardwareSerial.cpp **** size_t HardwareSerial::write(uint8_t c)
+ 134:Lib/HardwareSerial.cpp **** #else
+ 135:Lib/HardwareSerial.cpp **** void HardwareSerial::write(uint8_t c)
+ 136:Lib/HardwareSerial.cpp **** #endif
+ 137:Lib/HardwareSerial.cpp **** {
+ 178               		.loc 1 137 0
+ 179               		.cfi_startproc
+ 180               	.LVL21:
+ 181               	/* prologue: function */
+ 182               	/* frame size = 0 */
+ 183               	/* stack size = 0 */
+ 184               	.L__stack_usage = 0
+ 185               	.LBB69:
+ 138:Lib/HardwareSerial.cpp **** 	uint8_t i;
+ 139:Lib/HardwareSerial.cpp **** 
+ 140:Lib/HardwareSerial.cpp **** 	if (!(UCSR1B & (1<<TXEN1))) {
+ 186               		.loc 1 140 0
+ 187 007e 2091 C900 		lds r18,201
+ 188 0082 23FD      		sbrc r18,3
+ 189 0084 00C0      		rjmp .L20
+ 190               	.LVL22:
+ 191               	.LBB70:
+ 192               	.LBB71:
+ 193               		.file 2 "Lib/Print.h"
+   1:Lib/Print.h   **** /*
+   2:Lib/Print.h   ****   Print.h - Base class that provides print() and println()
+   3:Lib/Print.h   ****   Copyright (c) 2008 David A. Mellis.  All right reserved.
+   4:Lib/Print.h   **** 
+   5:Lib/Print.h   ****   This library is free software; you can redistribute it and/or
+   6:Lib/Print.h   ****   modify it under the terms of the GNU Lesser General Public
+   7:Lib/Print.h   ****   License as published by the Free Software Foundation; either
+   8:Lib/Print.h   ****   version 2.1 of the License, or (at your option) any later version.
+   9:Lib/Print.h   **** 
+  10:Lib/Print.h   ****   This library is distributed in the hope that it will be useful,
+  11:Lib/Print.h   ****   but WITHOUT ANY WARRANTY; without even the implied warranty of
+  12:Lib/Print.h   ****   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  13:Lib/Print.h   ****   Lesser General Public License for more details.
+  14:Lib/Print.h   **** 
+  15:Lib/Print.h   ****   You should have received a copy of the GNU Lesser General Public
+  16:Lib/Print.h   ****   License along with this library; if not, write to the Free Software
+  17:Lib/Print.h   ****   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+  18:Lib/Print.h   **** */
+  19:Lib/Print.h   **** 
+  20:Lib/Print.h   **** #ifndef Print_h
+  21:Lib/Print.h   **** #define Print_h
+  22:Lib/Print.h   **** 
+  23:Lib/Print.h   **** #include <inttypes.h>
+  24:Lib/Print.h   **** #include <stdio.h> // for size_t
+  25:Lib/Print.h   **** #include <stdarg.h>
+  26:Lib/Print.h   **** #include "core_id.h"
+  27:Lib/Print.h   **** //#include "WString.h"
+  28:Lib/Print.h   **** #include "Printable.h"
+  29:Lib/Print.h   **** 
+  30:Lib/Print.h   **** #define DEC 10
+  31:Lib/Print.h   **** #define HEX 16
+  32:Lib/Print.h   **** #define OCT 8
+  33:Lib/Print.h   **** #define BIN 2
+  34:Lib/Print.h   **** #define BYTE 0
+  35:Lib/Print.h   **** 
+  36:Lib/Print.h   **** class __FlashStringHelper;
+  37:Lib/Print.h   **** 
+  38:Lib/Print.h   **** #if ARDUINO >= 100
+  39:Lib/Print.h   **** class Print
+  40:Lib/Print.h   **** {
+  41:Lib/Print.h   ****   public:
+  42:Lib/Print.h   **** 	Print() : write_error(0) {}
+  43:Lib/Print.h   **** 	virtual size_t write(uint8_t b);
+  44:Lib/Print.h   **** 	size_t write(const char *str)			{ return write((const uint8_t *)str, strlen(str)); }
+  45:Lib/Print.h   **** 	virtual size_t write(const uint8_t *buffer, size_t size);
+  46:Lib/Print.h   **** 	size_t write(const char *buffer, size_t size)   { return write((const uint8_t *)buffer, size); }
+  47:Lib/Print.h   **** 	//size_t print(const String &s);
+  48:Lib/Print.h   **** 	size_t print(char c)				{ return write((uint8_t)c); }
+  49:Lib/Print.h   **** 	size_t print(const char s[])			{ return write(s); }
+  50:Lib/Print.h   **** 	size_t print(const __FlashStringHelper *f);
+  51:Lib/Print.h   **** 
+  52:Lib/Print.h   **** 	size_t print(uint8_t b)				{ return printNumber(b, 0, 10); }
+  53:Lib/Print.h   **** 	size_t print(int n)				{ return print((long)n); }
+  54:Lib/Print.h   **** 	size_t print(unsigned int n)			{ return printNumber(n, 0, 10); }
+  55:Lib/Print.h   **** 	size_t print(long n);
+  56:Lib/Print.h   **** 	size_t print(unsigned long n)			{ return printNumber(n, 0, 10); }
+  57:Lib/Print.h   **** 
+  58:Lib/Print.h   **** 	size_t print(unsigned char n, int base)		{ return printNumber(n, 0, base); }
+  59:Lib/Print.h   **** 	size_t print(int n, int base)			{ return (base == 10) ? print(n) : printNumber(n, 0, base); }
+  60:Lib/Print.h   **** 	size_t print(unsigned int n, int base)		{ return printNumber(n, 0, base); }
+  61:Lib/Print.h   **** 	size_t print(long n, int base)			{ return (base == 10) ? print(n) : printNumber(n, 0, base); }
+  62:Lib/Print.h   **** 	size_t print(unsigned long n, int base)		{ return printNumber(n, 0, base); }
+  63:Lib/Print.h   **** 
+  64:Lib/Print.h   **** 	size_t print(double n, int digits = 2)		{ return printFloat(n, digits); }
+  65:Lib/Print.h   **** 	size_t print(const Printable &obj)		{ return obj.printTo(*this); }
+  66:Lib/Print.h   **** 	size_t println(void);
+  67:Lib/Print.h   **** 	//size_t println(const String &s)			{ return print(s) + println(); }
+  68:Lib/Print.h   **** 	size_t println(char c)				{ return print(c) + println(); }
+  69:Lib/Print.h   **** 	size_t println(const char s[])			{ return print(s) + println(); }
+  70:Lib/Print.h   **** 	size_t println(const __FlashStringHelper *f)	{ return print(f) + println(); }
+  71:Lib/Print.h   **** 
+  72:Lib/Print.h   **** 	size_t println(uint8_t b)			{ return print(b) + println(); }
+  73:Lib/Print.h   **** 	size_t println(int n)				{ return print(n) + println(); }
+  74:Lib/Print.h   **** 	size_t println(unsigned int n)			{ return print(n) + println(); }
+  75:Lib/Print.h   **** 	size_t println(long n)				{ return print(n) + println(); }
+  76:Lib/Print.h   **** 	size_t println(unsigned long n)			{ return print(n) + println(); }
+  77:Lib/Print.h   **** 
+  78:Lib/Print.h   **** 	size_t println(unsigned char n, int base)	{ return print(n, base) + println(); }
+  79:Lib/Print.h   **** 	size_t println(int n, int base)			{ return print(n, base) + println(); }
+  80:Lib/Print.h   **** 	size_t println(unsigned int n, int base)	{ return print(n, base) + println(); }
+  81:Lib/Print.h   **** 	size_t println(long n, int base)		{ return print(n, base) + println(); }
+  82:Lib/Print.h   **** 	size_t println(unsigned long n, int base)	{ return print(n, base) + println(); }
+  83:Lib/Print.h   **** 
+  84:Lib/Print.h   **** 	size_t println(double n, int digits = 2)	{ return print(n, digits) + println(); }
+  85:Lib/Print.h   **** 	size_t println(const Printable &obj)		{ return obj.printTo(*this) + println(); }
+  86:Lib/Print.h   **** 	int getWriteError() { return write_error; }
+  87:Lib/Print.h   **** 	void clearWriteError() { setWriteError(0); }
+  88:Lib/Print.h   **** 	int printf(const char *format, ...);
+  89:Lib/Print.h   **** 	int printf(const __FlashStringHelper *format, ...);
+  90:Lib/Print.h   ****   protected:
+  91:Lib/Print.h   **** 	void setWriteError(int err = 1) { write_error = err; }
+ 194               		.loc 2 91 0
+ 195 0086 21E0      		ldi r18,lo8(1)
+ 196 0088 FC01      		movw r30,r24
+ 197 008a 2283      		std Z+2,r18
+ 198               	.LBE71:
+ 199               	.LBE70:
+ 141:Lib/HardwareSerial.cpp **** #if ARDUINO >= 100
+ 142:Lib/HardwareSerial.cpp **** 		setWriteError();
+ 143:Lib/HardwareSerial.cpp **** 		return 0;
+ 200               		.loc 1 143 0
+ 201 008c 80E0      		ldi r24,0
+ 202 008e 90E0      		ldi r25,0
+ 203               	.LVL23:
+ 204 0090 0895      		ret
+ 205               	.LVL24:
+ 206               	.L20:
+ 207               	.LBE69:
+ 208               	.LBB72:
+ 209               	.LBB73:
+ 144:Lib/HardwareSerial.cpp **** #else
+ 145:Lib/HardwareSerial.cpp **** 		return;
+ 146:Lib/HardwareSerial.cpp **** #endif
+ 147:Lib/HardwareSerial.cpp **** 	}
+ 148:Lib/HardwareSerial.cpp **** 	if (tx_enable_pin < 255 && !transmitting) {
+ 210               		.loc 1 148 0
+ 211 0092 8091 0000 		lds r24,_ZL13tx_enable_pin
+ 212               	.LVL25:
+ 213 0096 8F3F      		cpi r24,lo8(-1)
+ 214 0098 01F0      		breq .L22
+ 215 009a 8091 0000 		lds r24,_ZL12transmitting
+ 216 009e 8823      		tst r24
+ 217 00a0 01F0      		breq .L23
+ 218               	.L22:
+ 149:Lib/HardwareSerial.cpp **** 		digitalWrite(tx_enable_pin, HIGH);
+ 150:Lib/HardwareSerial.cpp **** 	}
+ 151:Lib/HardwareSerial.cpp **** 	i = tx_buffer_head + 1;
+ 219               		.loc 1 151 0
+ 220 00a2 8091 0000 		lds r24,_ZL14tx_buffer_head
+ 221 00a6 8F5F      		subi r24,lo8(-(1))
+ 222               	.LVL26:
+ 152:Lib/HardwareSerial.cpp **** 	if (i >= TX_BUFFER_SIZE) i = 0;
+ 223               		.loc 1 152 0
+ 224 00a8 8832      		cpi r24,lo8(40)
+ 225 00aa 00F0      		brlo .L26
+ 226 00ac 80E0      		ldi r24,0
+ 227               	.LVL27:
+ 228               	.L26:
+ 153:Lib/HardwareSerial.cpp **** 	while (tx_buffer_tail == i) ; // wait until space in buffer
+ 229               		.loc 1 153 0
+ 230 00ae 9091 0000 		lds r25,_ZL14tx_buffer_tail
+ 231 00b2 9817      		cp r25,r24
+ 232 00b4 01F0      		breq .L26
+ 154:Lib/HardwareSerial.cpp **** 	tx_buffer[i] = c;
+ 233               		.loc 1 154 0
+ 234 00b6 E82F      		mov r30,r24
+ 235 00b8 F0E0      		ldi r31,0
+ 236 00ba E050      		subi r30,lo8(-(_ZL9tx_buffer))
+ 237 00bc F040      		sbci r31,hi8(-(_ZL9tx_buffer))
+ 238 00be 6083      		st Z,r22
+ 155:Lib/HardwareSerial.cpp **** 	transmitting = 1;
+ 239               		.loc 1 155 0
+ 240 00c0 91E0      		ldi r25,lo8(1)
+ 241 00c2 9093 0000 		sts _ZL12transmitting,r25
+ 156:Lib/HardwareSerial.cpp **** 	tx_buffer_head = i;
+ 242               		.loc 1 156 0
+ 243 00c6 8093 0000 		sts _ZL14tx_buffer_head,r24
+ 157:Lib/HardwareSerial.cpp **** 	UCSR1B = (1<<RXEN1) | (1<<TXCIE1) | (1<<TXEN1) | (1<<RXCIE1) | (1<<UDRIE1);
+ 244               		.loc 1 157 0
+ 245 00ca 88EF      		ldi r24,lo8(-8)
+ 246               	.LVL28:
+ 247 00cc 8093 C900 		sts 201,r24
+ 248               	.LVL29:
+ 249 00d0 81E0      		ldi r24,lo8(1)
+ 250 00d2 90E0      		ldi r25,0
+ 251 00d4 0895      		ret
+ 252               	.L23:
+ 149:Lib/HardwareSerial.cpp **** 		digitalWrite(tx_enable_pin, HIGH);
+ 253               		.loc 1 149 0
+ 254 00d6 E091 0000 		lds r30,_ZL13tx_enable_pin
+ 255               	.LVL30:
+ 256               	.LBB74:
+ 257               	.LBB75:
+ 258               		.file 3 "Lib/core_pins.h"
+   1:Lib/core_pins.h **** #ifndef _core_pins_h_
+   2:Lib/core_pins.h **** #define _core_pins_h_
+   3:Lib/core_pins.h **** 
+   4:Lib/core_pins.h **** #include <avr/io.h>
+   5:Lib/core_pins.h **** 
+   6:Lib/core_pins.h **** #if (GCC_VERSION >= 40300) && (GCC_VERSION < 40302)
+   7:Lib/core_pins.h **** #error "Buggy GCC 4.3.0 compiler, please upgrade!"
+   8:Lib/core_pins.h **** #endif
+   9:Lib/core_pins.h **** 
+  10:Lib/core_pins.h **** 
+  11:Lib/core_pins.h **** // This will speed up digitalWrite slightly, but it
+  12:Lib/core_pins.h **** // adds to your code size.  However, if you don't
+  13:Lib/core_pins.h **** // have many digitalWrites, or most are compile time
+  14:Lib/core_pins.h **** // constant inputs, then this might be worthwhile
+  15:Lib/core_pins.h **** //#define DIGITAL_WRITE_EXPENSIVE_INLINE_OPTIMIZATION
+  16:Lib/core_pins.h **** 
+  17:Lib/core_pins.h **** // This removes checking in digitalWrite for pin numbers
+  18:Lib/core_pins.h **** // beyond the maximum number of pins.  Your program
+  19:Lib/core_pins.h **** // WILL CRASH is digitalWrite is called with a pin number
+  20:Lib/core_pins.h **** // too large, when this is enabled.  However, if you don't
+  21:Lib/core_pins.h **** // make such mistakes, you'll get a minor speedup.
+  22:Lib/core_pins.h **** //#define DIGITAL_WRITE_RISKY_OMIT_OVERFLOW_CHECK
+  23:Lib/core_pins.h **** 
+  24:Lib/core_pins.h **** #define HIGH 0x1
+  25:Lib/core_pins.h **** #define LOW  0x0
+  26:Lib/core_pins.h **** 
+  27:Lib/core_pins.h **** #define INPUT 0x0
+  28:Lib/core_pins.h **** #define OUTPUT 0x1
+  29:Lib/core_pins.h **** #define INPUT_PULLUP 0x2
+  30:Lib/core_pins.h **** 
+  31:Lib/core_pins.h **** #define LSBFIRST 0
+  32:Lib/core_pins.h **** #define MSBFIRST 1
+  33:Lib/core_pins.h **** 
+  34:Lib/core_pins.h **** #ifndef _BV
+  35:Lib/core_pins.h **** #define _BV(n) (1<<(n))
+  36:Lib/core_pins.h **** #endif
+  37:Lib/core_pins.h **** 
+  38:Lib/core_pins.h **** ////////////////////////////////////
+  39:Lib/core_pins.h **** // Teensy 2.0
+  40:Lib/core_pins.h **** ////////////////////////////////////
+  41:Lib/core_pins.h **** #if defined(__AVR_ATmega32U4__)
+  42:Lib/core_pins.h **** #define CORE_NUM_TOTAL_PINS	25
+  43:Lib/core_pins.h **** #define CORE_NUM_DIGITAL	13
+  44:Lib/core_pins.h **** #define CORE_NUM_ANALOG		12
+  45:Lib/core_pins.h **** #define CORE_NUM_PWM		7
+  46:Lib/core_pins.h **** #define CORE_NUM_INTERRUPT	4
+  47:Lib/core_pins.h **** #define PIN_B0		0
+  48:Lib/core_pins.h **** #define PIN_B1		1
+  49:Lib/core_pins.h **** #define PIN_B2		2
+  50:Lib/core_pins.h **** #define PIN_B3		3
+  51:Lib/core_pins.h **** #define PIN_B7		4
+  52:Lib/core_pins.h **** #define PIN_D0		5
+  53:Lib/core_pins.h **** #define PIN_D1		6
+  54:Lib/core_pins.h **** #define PIN_D2		7
+  55:Lib/core_pins.h **** #define PIN_D3		8
+  56:Lib/core_pins.h **** #define PIN_C6		9
+  57:Lib/core_pins.h **** #define PIN_C7		10
+  58:Lib/core_pins.h **** #define PIN_D6		11
+  59:Lib/core_pins.h **** #define PIN_D7		12
+  60:Lib/core_pins.h **** #define PIN_B4		13
+  61:Lib/core_pins.h **** #define PIN_B5		14
+  62:Lib/core_pins.h **** #define PIN_B6		15
+  63:Lib/core_pins.h **** #define PIN_F7		16
+  64:Lib/core_pins.h **** #define PIN_F6		17
+  65:Lib/core_pins.h **** #define PIN_F5		18
+  66:Lib/core_pins.h **** #define PIN_F4		19
+  67:Lib/core_pins.h **** #define PIN_F1		20
+  68:Lib/core_pins.h **** #define PIN_F0		21
+  69:Lib/core_pins.h **** #define PIN_D4		22
+  70:Lib/core_pins.h **** #define PIN_D5		23
+  71:Lib/core_pins.h **** #define PIN_E6		24
+  72:Lib/core_pins.h **** #define CORE_PIN0_BIT		0
+  73:Lib/core_pins.h **** #define CORE_PIN1_BIT		1
+  74:Lib/core_pins.h **** #define CORE_PIN2_BIT		2
+  75:Lib/core_pins.h **** #define CORE_PIN3_BIT		3
+  76:Lib/core_pins.h **** #define CORE_PIN4_BIT		7
+  77:Lib/core_pins.h **** #define CORE_PIN5_BIT		0
+  78:Lib/core_pins.h **** #define CORE_PIN6_BIT		1
+  79:Lib/core_pins.h **** #define CORE_PIN7_BIT		2
+  80:Lib/core_pins.h **** #define CORE_PIN8_BIT		3
+  81:Lib/core_pins.h **** #define CORE_PIN9_BIT		6
+  82:Lib/core_pins.h **** #define CORE_PIN10_BIT		7
+  83:Lib/core_pins.h **** #define CORE_PIN11_BIT		6
+  84:Lib/core_pins.h **** #define CORE_PIN12_BIT		7
+  85:Lib/core_pins.h **** #define CORE_PIN13_BIT		4
+  86:Lib/core_pins.h **** #define CORE_PIN14_BIT		5
+  87:Lib/core_pins.h **** #define CORE_PIN15_BIT		6
+  88:Lib/core_pins.h **** #define CORE_PIN16_BIT		7
+  89:Lib/core_pins.h **** #define CORE_PIN17_BIT		6
+  90:Lib/core_pins.h **** #define CORE_PIN18_BIT		5
+  91:Lib/core_pins.h **** #define CORE_PIN19_BIT		4
+  92:Lib/core_pins.h **** #define CORE_PIN20_BIT		1
+  93:Lib/core_pins.h **** #define CORE_PIN21_BIT		0
+  94:Lib/core_pins.h **** #define CORE_PIN22_BIT		4
+  95:Lib/core_pins.h **** #define CORE_PIN23_BIT		5
+  96:Lib/core_pins.h **** #define CORE_PIN24_BIT		6
+  97:Lib/core_pins.h **** #define CORE_PIN0_BITMASK	_BV(CORE_PIN0_BIT)
+  98:Lib/core_pins.h **** #define CORE_PIN1_BITMASK	_BV(CORE_PIN1_BIT)
+  99:Lib/core_pins.h **** #define CORE_PIN2_BITMASK	_BV(CORE_PIN2_BIT)
+ 100:Lib/core_pins.h **** #define CORE_PIN3_BITMASK	_BV(CORE_PIN3_BIT)
+ 101:Lib/core_pins.h **** #define CORE_PIN4_BITMASK	_BV(CORE_PIN4_BIT)
+ 102:Lib/core_pins.h **** #define CORE_PIN5_BITMASK	_BV(CORE_PIN5_BIT)
+ 103:Lib/core_pins.h **** #define CORE_PIN6_BITMASK	_BV(CORE_PIN6_BIT)
+ 104:Lib/core_pins.h **** #define CORE_PIN7_BITMASK	_BV(CORE_PIN7_BIT)
+ 105:Lib/core_pins.h **** #define CORE_PIN8_BITMASK	_BV(CORE_PIN8_BIT)
+ 106:Lib/core_pins.h **** #define CORE_PIN9_BITMASK	_BV(CORE_PIN9_BIT)
+ 107:Lib/core_pins.h **** #define CORE_PIN10_BITMASK	_BV(CORE_PIN10_BIT)
+ 108:Lib/core_pins.h **** #define CORE_PIN11_BITMASK	_BV(CORE_PIN11_BIT)
+ 109:Lib/core_pins.h **** #define CORE_PIN12_BITMASK	_BV(CORE_PIN12_BIT)
+ 110:Lib/core_pins.h **** #define CORE_PIN13_BITMASK	_BV(CORE_PIN13_BIT)
+ 111:Lib/core_pins.h **** #define CORE_PIN14_BITMASK	_BV(CORE_PIN14_BIT)
+ 112:Lib/core_pins.h **** #define CORE_PIN15_BITMASK	_BV(CORE_PIN15_BIT)
+ 113:Lib/core_pins.h **** #define CORE_PIN16_BITMASK	_BV(CORE_PIN16_BIT)
+ 114:Lib/core_pins.h **** #define CORE_PIN17_BITMASK	_BV(CORE_PIN17_BIT)
+ 115:Lib/core_pins.h **** #define CORE_PIN18_BITMASK	_BV(CORE_PIN18_BIT)
+ 116:Lib/core_pins.h **** #define CORE_PIN19_BITMASK	_BV(CORE_PIN19_BIT)
+ 117:Lib/core_pins.h **** #define CORE_PIN20_BITMASK	_BV(CORE_PIN20_BIT)
+ 118:Lib/core_pins.h **** #define CORE_PIN21_BITMASK	_BV(CORE_PIN21_BIT)
+ 119:Lib/core_pins.h **** #define CORE_PIN22_BITMASK	_BV(CORE_PIN22_BIT)
+ 120:Lib/core_pins.h **** #define CORE_PIN23_BITMASK	_BV(CORE_PIN23_BIT)
+ 121:Lib/core_pins.h **** #define CORE_PIN24_BITMASK	_BV(CORE_PIN24_BIT)
+ 122:Lib/core_pins.h **** #define CORE_PIN0_PORTREG	PORTB
+ 123:Lib/core_pins.h **** #define CORE_PIN1_PORTREG	PORTB
+ 124:Lib/core_pins.h **** #define CORE_PIN2_PORTREG	PORTB
+ 125:Lib/core_pins.h **** #define CORE_PIN3_PORTREG	PORTB
+ 126:Lib/core_pins.h **** #define CORE_PIN4_PORTREG	PORTB
+ 127:Lib/core_pins.h **** #define CORE_PIN5_PORTREG	PORTD
+ 128:Lib/core_pins.h **** #define CORE_PIN6_PORTREG	PORTD
+ 129:Lib/core_pins.h **** #define CORE_PIN7_PORTREG	PORTD
+ 130:Lib/core_pins.h **** #define CORE_PIN8_PORTREG	PORTD
+ 131:Lib/core_pins.h **** #define CORE_PIN9_PORTREG	PORTC
+ 132:Lib/core_pins.h **** #define CORE_PIN10_PORTREG	PORTC
+ 133:Lib/core_pins.h **** #define CORE_PIN11_PORTREG	PORTD
+ 134:Lib/core_pins.h **** #define CORE_PIN12_PORTREG	PORTD
+ 135:Lib/core_pins.h **** #define CORE_PIN13_PORTREG	PORTB
+ 136:Lib/core_pins.h **** #define CORE_PIN14_PORTREG	PORTB
+ 137:Lib/core_pins.h **** #define CORE_PIN15_PORTREG	PORTB
+ 138:Lib/core_pins.h **** #define CORE_PIN16_PORTREG	PORTF
+ 139:Lib/core_pins.h **** #define CORE_PIN17_PORTREG	PORTF
+ 140:Lib/core_pins.h **** #define CORE_PIN18_PORTREG	PORTF
+ 141:Lib/core_pins.h **** #define CORE_PIN19_PORTREG	PORTF
+ 142:Lib/core_pins.h **** #define CORE_PIN20_PORTREG	PORTF
+ 143:Lib/core_pins.h **** #define CORE_PIN21_PORTREG	PORTF
+ 144:Lib/core_pins.h **** #define CORE_PIN22_PORTREG	PORTD
+ 145:Lib/core_pins.h **** #define CORE_PIN23_PORTREG	PORTD
+ 146:Lib/core_pins.h **** #define CORE_PIN24_PORTREG	PORTE
+ 147:Lib/core_pins.h **** #define CORE_PIN0_DDRREG	DDRB
+ 148:Lib/core_pins.h **** #define CORE_PIN1_DDRREG	DDRB
+ 149:Lib/core_pins.h **** #define CORE_PIN2_DDRREG	DDRB
+ 150:Lib/core_pins.h **** #define CORE_PIN3_DDRREG	DDRB
+ 151:Lib/core_pins.h **** #define CORE_PIN4_DDRREG	DDRB
+ 152:Lib/core_pins.h **** #define CORE_PIN5_DDRREG	DDRD
+ 153:Lib/core_pins.h **** #define CORE_PIN6_DDRREG	DDRD
+ 154:Lib/core_pins.h **** #define CORE_PIN7_DDRREG	DDRD
+ 155:Lib/core_pins.h **** #define CORE_PIN8_DDRREG	DDRD
+ 156:Lib/core_pins.h **** #define CORE_PIN9_DDRREG	DDRC
+ 157:Lib/core_pins.h **** #define CORE_PIN10_DDRREG	DDRC
+ 158:Lib/core_pins.h **** #define CORE_PIN11_DDRREG	DDRD
+ 159:Lib/core_pins.h **** #define CORE_PIN12_DDRREG	DDRD
+ 160:Lib/core_pins.h **** #define CORE_PIN13_DDRREG	DDRB
+ 161:Lib/core_pins.h **** #define CORE_PIN14_DDRREG	DDRB
+ 162:Lib/core_pins.h **** #define CORE_PIN15_DDRREG	DDRB
+ 163:Lib/core_pins.h **** #define CORE_PIN16_DDRREG	DDRF
+ 164:Lib/core_pins.h **** #define CORE_PIN17_DDRREG	DDRF
+ 165:Lib/core_pins.h **** #define CORE_PIN18_DDRREG	DDRF
+ 166:Lib/core_pins.h **** #define CORE_PIN19_DDRREG	DDRF
+ 167:Lib/core_pins.h **** #define CORE_PIN20_DDRREG	DDRF
+ 168:Lib/core_pins.h **** #define CORE_PIN21_DDRREG	DDRF
+ 169:Lib/core_pins.h **** #define CORE_PIN22_DDRREG	DDRD
+ 170:Lib/core_pins.h **** #define CORE_PIN23_DDRREG	DDRD
+ 171:Lib/core_pins.h **** #define CORE_PIN24_DDRREG	DDRE
+ 172:Lib/core_pins.h **** #define CORE_PIN0_PINREG	PINB
+ 173:Lib/core_pins.h **** #define CORE_PIN1_PINREG	PINB
+ 174:Lib/core_pins.h **** #define CORE_PIN2_PINREG	PINB
+ 175:Lib/core_pins.h **** #define CORE_PIN3_PINREG	PINB
+ 176:Lib/core_pins.h **** #define CORE_PIN4_PINREG	PINB
+ 177:Lib/core_pins.h **** #define CORE_PIN5_PINREG	PIND
+ 178:Lib/core_pins.h **** #define CORE_PIN6_PINREG	PIND
+ 179:Lib/core_pins.h **** #define CORE_PIN7_PINREG	PIND
+ 180:Lib/core_pins.h **** #define CORE_PIN8_PINREG	PIND
+ 181:Lib/core_pins.h **** #define CORE_PIN9_PINREG	PINC
+ 182:Lib/core_pins.h **** #define CORE_PIN10_PINREG	PINC
+ 183:Lib/core_pins.h **** #define CORE_PIN11_PINREG	PIND
+ 184:Lib/core_pins.h **** #define CORE_PIN12_PINREG	PIND
+ 185:Lib/core_pins.h **** #define CORE_PIN13_PINREG	PINB
+ 186:Lib/core_pins.h **** #define CORE_PIN14_PINREG	PINB
+ 187:Lib/core_pins.h **** #define CORE_PIN15_PINREG	PINB
+ 188:Lib/core_pins.h **** #define CORE_PIN16_PINREG	PINF
+ 189:Lib/core_pins.h **** #define CORE_PIN17_PINREG	PINF
+ 190:Lib/core_pins.h **** #define CORE_PIN18_PINREG	PINF
+ 191:Lib/core_pins.h **** #define CORE_PIN19_PINREG	PINF
+ 192:Lib/core_pins.h **** #define CORE_PIN20_PINREG	PINF
+ 193:Lib/core_pins.h **** #define CORE_PIN21_PINREG	PINF
+ 194:Lib/core_pins.h **** #define CORE_PIN22_PINREG	PIND
+ 195:Lib/core_pins.h **** #define CORE_PIN23_PINREG	PIND
+ 196:Lib/core_pins.h **** #define CORE_PIN24_PINREG	PINE
+ 197:Lib/core_pins.h **** #define CORE_ADC0_PIN		PIN_F0
+ 198:Lib/core_pins.h **** #define CORE_ADC1_PIN		PIN_F1
+ 199:Lib/core_pins.h **** #define CORE_ADC4_PIN		PIN_F4
+ 200:Lib/core_pins.h **** #define CORE_ADC5_PIN		PIN_F5
+ 201:Lib/core_pins.h **** #define CORE_ADC6_PIN		PIN_F6
+ 202:Lib/core_pins.h **** #define CORE_ADC7_PIN		PIN_F7
+ 203:Lib/core_pins.h **** #define CORE_ADC8_PIN		PIN_D4
+ 204:Lib/core_pins.h **** #define CORE_ADC9_PIN		PIN_D6
+ 205:Lib/core_pins.h **** #define CORE_ADC10_PIN		PIN_D7
+ 206:Lib/core_pins.h **** #define CORE_ADC11_PIN		PIN_B4
+ 207:Lib/core_pins.h **** #define CORE_ADC12_PIN		PIN_B5
+ 208:Lib/core_pins.h **** #define CORE_ADC13_PIN		PIN_B6
+ 209:Lib/core_pins.h **** #define CORE_RXD1_PIN           PIN_D2
+ 210:Lib/core_pins.h **** #define CORE_TXD1_PIN           PIN_D3
+ 211:Lib/core_pins.h **** #define CORE_XCK1_PIN           PIN_D5
+ 212:Lib/core_pins.h **** #define CORE_SDA0_PIN           PIN_D1
+ 213:Lib/core_pins.h **** #define CORE_SCL0_PIN           PIN_D0
+ 214:Lib/core_pins.h **** #define CORE_INT0_PIN           PIN_D0
+ 215:Lib/core_pins.h **** #define CORE_INT1_PIN           PIN_D1
+ 216:Lib/core_pins.h **** #define CORE_INT2_PIN           PIN_D2
+ 217:Lib/core_pins.h **** #define CORE_INT3_PIN           PIN_D3
+ 218:Lib/core_pins.h **** #define CORE_SS0_PIN            PIN_B0
+ 219:Lib/core_pins.h **** #define CORE_MOSI0_PIN          PIN_B2
+ 220:Lib/core_pins.h **** #define CORE_MISO0_PIN          PIN_B3
+ 221:Lib/core_pins.h **** #define CORE_SCLK0_PIN          PIN_B1
+ 222:Lib/core_pins.h **** #define CORE_T0_PIN             PIN_D7
+ 223:Lib/core_pins.h **** #define CORE_T1_PIN             PIN_D6
+ 224:Lib/core_pins.h **** #define CORE_ICP1_PIN           PIN_D4
+ 225:Lib/core_pins.h **** #define CORE_ICP3_PIN           PIN_C7
+ 226:Lib/core_pins.h **** #define CORE_OC0A_PIN           PIN_B7
+ 227:Lib/core_pins.h **** #define CORE_OC0B_PIN           PIN_D0
+ 228:Lib/core_pins.h **** #define CORE_OC1A_PIN           PIN_B5
+ 229:Lib/core_pins.h **** #define CORE_OC1B_PIN           PIN_B6
+ 230:Lib/core_pins.h **** #define CORE_OC1C_PIN           PIN_B7
+ 231:Lib/core_pins.h **** #define CORE_OC3A_PIN           PIN_C6
+ 232:Lib/core_pins.h **** #define CORE_OC4A_PIN           PIN_C7
+ 233:Lib/core_pins.h **** #define CORE_OC4AN_PIN          PIN_C6
+ 234:Lib/core_pins.h **** #define CORE_OC4B_PIN           PIN_B6
+ 235:Lib/core_pins.h **** #define CORE_OC4BN_PIN          PIN_B5
+ 236:Lib/core_pins.h **** #define CORE_OC4D_PIN           PIN_D7
+ 237:Lib/core_pins.h **** #define CORE_OC4DN_PIN          PIN_D6
+ 238:Lib/core_pins.h **** #define CORE_PCINT0_PIN		PIN_B0
+ 239:Lib/core_pins.h **** #define CORE_PCINT1_PIN		PIN_B1
+ 240:Lib/core_pins.h **** #define CORE_PCINT2_PIN		PIN_B2
+ 241:Lib/core_pins.h **** #define CORE_PCINT3_PIN		PIN_B3
+ 242:Lib/core_pins.h **** #define CORE_PCINT4_PIN		PIN_B4
+ 243:Lib/core_pins.h **** #define CORE_PCINT5_PIN		PIN_B5
+ 244:Lib/core_pins.h **** #define CORE_PCINT6_PIN		PIN_B6
+ 245:Lib/core_pins.h **** #define CORE_PCINT7_PIN		PIN_B7
+ 246:Lib/core_pins.h **** #define CORE_LED0_PIN		PIN_D6
+ 247:Lib/core_pins.h **** #define CORE_PWM0_PIN		CORE_OC1C_PIN	// B7  4
+ 248:Lib/core_pins.h **** #define CORE_PWM1_PIN		CORE_OC0B_PIN	// D0  5
+ 249:Lib/core_pins.h **** #define CORE_PWM2_PIN		CORE_OC3A_PIN	// C6  9
+ 250:Lib/core_pins.h **** #define CORE_PWM3_PIN		CORE_OC4A_PIN	// C7  10
+ 251:Lib/core_pins.h **** #define CORE_PWM4_PIN		CORE_OC4D_PIN	// D7  12
+ 252:Lib/core_pins.h **** #define CORE_PWM5_PIN		CORE_OC1A_PIN	// B5  14
+ 253:Lib/core_pins.h **** #define CORE_PWM6_PIN		CORE_OC1B_PIN	// B6  15
+ 254:Lib/core_pins.h **** #define CORE_ANALOG0_PIN	PIN_F0	// 21  ADC0
+ 255:Lib/core_pins.h **** #define CORE_ANALOG1_PIN	PIN_F1	// 20  ADC1
+ 256:Lib/core_pins.h **** #define CORE_ANALOG2_PIN	PIN_F4	// 19  ADC4
+ 257:Lib/core_pins.h **** #define CORE_ANALOG3_PIN	PIN_F5	// 18  ADC5
+ 258:Lib/core_pins.h **** #define CORE_ANALOG4_PIN	PIN_F6	// 17  ADC6
+ 259:Lib/core_pins.h **** #define CORE_ANALOG5_PIN	PIN_F7	// 16  ADC7
+ 260:Lib/core_pins.h **** #define CORE_ANALOG6_PIN	PIN_B6	// 15  ADC13
+ 261:Lib/core_pins.h **** #define CORE_ANALOG7_PIN	PIN_B5	// 14  ADC12
+ 262:Lib/core_pins.h **** #define CORE_ANALOG8_PIN	PIN_B4	// 13  ADC11
+ 263:Lib/core_pins.h **** #define CORE_ANALOG9_PIN	PIN_D7	// 12  ADC10
+ 264:Lib/core_pins.h **** #define CORE_ANALOG10_PIN	PIN_D6  // 11  ADC9
+ 265:Lib/core_pins.h **** #define CORE_ANALOG11_PIN	PIN_D4	// 22  ADC8
+ 266:Lib/core_pins.h **** 
+ 267:Lib/core_pins.h **** 
+ 268:Lib/core_pins.h **** ////////////////////////////////////
+ 269:Lib/core_pins.h **** // Teensy 1.0
+ 270:Lib/core_pins.h **** ////////////////////////////////////
+ 271:Lib/core_pins.h **** #elif defined(__AVR_AT90USB162__)
+ 272:Lib/core_pins.h **** #define CORE_NUM_TOTAL_PINS	21
+ 273:Lib/core_pins.h **** #define CORE_NUM_DIGITAL	21
+ 274:Lib/core_pins.h **** #define CORE_NUM_ANALOG		0
+ 275:Lib/core_pins.h **** #define CORE_NUM_PWM		4
+ 276:Lib/core_pins.h **** #define CORE_NUM_INTERRUPT	8
+ 277:Lib/core_pins.h **** #define PIN_D0		0
+ 278:Lib/core_pins.h **** #define PIN_D1		1
+ 279:Lib/core_pins.h **** #define PIN_D2		2
+ 280:Lib/core_pins.h **** #define PIN_D3		3
+ 281:Lib/core_pins.h **** #define PIN_D4		4
+ 282:Lib/core_pins.h **** #define PIN_D5		5
+ 283:Lib/core_pins.h **** #define PIN_D6		6
+ 284:Lib/core_pins.h **** #define PIN_D7		7
+ 285:Lib/core_pins.h **** #define PIN_SS		8
+ 286:Lib/core_pins.h **** #define PIN_SCLK	9
+ 287:Lib/core_pins.h **** #define PIN_MOSI	10
+ 288:Lib/core_pins.h **** #define PIN_MISO	11
+ 289:Lib/core_pins.h **** #define PIN_B0		8
+ 290:Lib/core_pins.h **** #define PIN_B1		9
+ 291:Lib/core_pins.h **** #define PIN_B2		10
+ 292:Lib/core_pins.h **** #define PIN_B3		11
+ 293:Lib/core_pins.h **** #define PIN_B4		12
+ 294:Lib/core_pins.h **** #define PIN_B5		13
+ 295:Lib/core_pins.h **** #define PIN_B6		14
+ 296:Lib/core_pins.h **** #define PIN_B7		15
+ 297:Lib/core_pins.h **** #define PIN_C7		16
+ 298:Lib/core_pins.h **** #define PIN_C6		17
+ 299:Lib/core_pins.h **** #define PIN_C5		18
+ 300:Lib/core_pins.h **** #define PIN_C4		19
+ 301:Lib/core_pins.h **** #define PIN_C2		20
+ 302:Lib/core_pins.h **** #define CORE_PIN0_BIT		0
+ 303:Lib/core_pins.h **** #define CORE_PIN1_BIT		1
+ 304:Lib/core_pins.h **** #define CORE_PIN2_BIT		2
+ 305:Lib/core_pins.h **** #define CORE_PIN3_BIT		3
+ 306:Lib/core_pins.h **** #define CORE_PIN4_BIT		4
+ 307:Lib/core_pins.h **** #define CORE_PIN5_BIT		5
+ 308:Lib/core_pins.h **** #define CORE_PIN6_BIT		6
+ 309:Lib/core_pins.h **** #define CORE_PIN7_BIT		7
+ 310:Lib/core_pins.h **** #define CORE_PIN8_BIT		0
+ 311:Lib/core_pins.h **** #define CORE_PIN9_BIT		1
+ 312:Lib/core_pins.h **** #define CORE_PIN10_BIT		2
+ 313:Lib/core_pins.h **** #define CORE_PIN11_BIT		3
+ 314:Lib/core_pins.h **** #define CORE_PIN12_BIT		4
+ 315:Lib/core_pins.h **** #define CORE_PIN13_BIT		5
+ 316:Lib/core_pins.h **** #define CORE_PIN14_BIT		6
+ 317:Lib/core_pins.h **** #define CORE_PIN15_BIT		7
+ 318:Lib/core_pins.h **** #define CORE_PIN16_BIT		7
+ 319:Lib/core_pins.h **** #define CORE_PIN17_BIT		6
+ 320:Lib/core_pins.h **** #define CORE_PIN18_BIT		5
+ 321:Lib/core_pins.h **** #define CORE_PIN19_BIT		4
+ 322:Lib/core_pins.h **** #define CORE_PIN20_BIT		2
+ 323:Lib/core_pins.h **** #define CORE_PIN0_BITMASK	_BV(CORE_PIN0_BIT)
+ 324:Lib/core_pins.h **** #define CORE_PIN1_BITMASK	_BV(CORE_PIN1_BIT)
+ 325:Lib/core_pins.h **** #define CORE_PIN2_BITMASK	_BV(CORE_PIN2_BIT)
+ 326:Lib/core_pins.h **** #define CORE_PIN3_BITMASK	_BV(CORE_PIN3_BIT)
+ 327:Lib/core_pins.h **** #define CORE_PIN4_BITMASK	_BV(CORE_PIN4_BIT)
+ 328:Lib/core_pins.h **** #define CORE_PIN5_BITMASK	_BV(CORE_PIN5_BIT)
+ 329:Lib/core_pins.h **** #define CORE_PIN6_BITMASK	_BV(CORE_PIN6_BIT)
+ 330:Lib/core_pins.h **** #define CORE_PIN7_BITMASK	_BV(CORE_PIN7_BIT)
+ 331:Lib/core_pins.h **** #define CORE_PIN8_BITMASK	_BV(CORE_PIN8_BIT)
+ 332:Lib/core_pins.h **** #define CORE_PIN9_BITMASK	_BV(CORE_PIN9_BIT)
+ 333:Lib/core_pins.h **** #define CORE_PIN10_BITMASK	_BV(CORE_PIN10_BIT)
+ 334:Lib/core_pins.h **** #define CORE_PIN11_BITMASK	_BV(CORE_PIN11_BIT)
+ 335:Lib/core_pins.h **** #define CORE_PIN12_BITMASK	_BV(CORE_PIN12_BIT)
+ 336:Lib/core_pins.h **** #define CORE_PIN13_BITMASK	_BV(CORE_PIN13_BIT)
+ 337:Lib/core_pins.h **** #define CORE_PIN14_BITMASK	_BV(CORE_PIN14_BIT)
+ 338:Lib/core_pins.h **** #define CORE_PIN15_BITMASK	_BV(CORE_PIN15_BIT)
+ 339:Lib/core_pins.h **** #define CORE_PIN16_BITMASK	_BV(CORE_PIN16_BIT)
+ 340:Lib/core_pins.h **** #define CORE_PIN17_BITMASK	_BV(CORE_PIN17_BIT)
+ 341:Lib/core_pins.h **** #define CORE_PIN18_BITMASK	_BV(CORE_PIN18_BIT)
+ 342:Lib/core_pins.h **** #define CORE_PIN19_BITMASK	_BV(CORE_PIN19_BIT)
+ 343:Lib/core_pins.h **** #define CORE_PIN20_BITMASK	_BV(CORE_PIN20_BIT)
+ 344:Lib/core_pins.h **** #define CORE_PIN0_PORTREG	PORTD
+ 345:Lib/core_pins.h **** #define CORE_PIN1_PORTREG	PORTD
+ 346:Lib/core_pins.h **** #define CORE_PIN2_PORTREG	PORTD
+ 347:Lib/core_pins.h **** #define CORE_PIN3_PORTREG	PORTD
+ 348:Lib/core_pins.h **** #define CORE_PIN4_PORTREG	PORTD
+ 349:Lib/core_pins.h **** #define CORE_PIN5_PORTREG	PORTD
+ 350:Lib/core_pins.h **** #define CORE_PIN6_PORTREG	PORTD
+ 351:Lib/core_pins.h **** #define CORE_PIN7_PORTREG	PORTD
+ 352:Lib/core_pins.h **** #define CORE_PIN8_PORTREG	PORTB
+ 353:Lib/core_pins.h **** #define CORE_PIN9_PORTREG	PORTB
+ 354:Lib/core_pins.h **** #define CORE_PIN10_PORTREG	PORTB
+ 355:Lib/core_pins.h **** #define CORE_PIN11_PORTREG	PORTB
+ 356:Lib/core_pins.h **** #define CORE_PIN12_PORTREG	PORTB
+ 357:Lib/core_pins.h **** #define CORE_PIN13_PORTREG	PORTB
+ 358:Lib/core_pins.h **** #define CORE_PIN14_PORTREG	PORTB
+ 359:Lib/core_pins.h **** #define CORE_PIN15_PORTREG	PORTB
+ 360:Lib/core_pins.h **** #define CORE_PIN16_PORTREG	PORTC
+ 361:Lib/core_pins.h **** #define CORE_PIN17_PORTREG	PORTC
+ 362:Lib/core_pins.h **** #define CORE_PIN18_PORTREG	PORTC
+ 363:Lib/core_pins.h **** #define CORE_PIN19_PORTREG	PORTC
+ 364:Lib/core_pins.h **** #define CORE_PIN20_PORTREG	PORTC
+ 365:Lib/core_pins.h **** #define CORE_PIN0_DDRREG	DDRD
+ 366:Lib/core_pins.h **** #define CORE_PIN1_DDRREG	DDRD
+ 367:Lib/core_pins.h **** #define CORE_PIN2_DDRREG	DDRD
+ 368:Lib/core_pins.h **** #define CORE_PIN3_DDRREG	DDRD
+ 369:Lib/core_pins.h **** #define CORE_PIN4_DDRREG	DDRD
+ 370:Lib/core_pins.h **** #define CORE_PIN5_DDRREG	DDRD
+ 371:Lib/core_pins.h **** #define CORE_PIN6_DDRREG	DDRD
+ 372:Lib/core_pins.h **** #define CORE_PIN7_DDRREG	DDRD
+ 373:Lib/core_pins.h **** #define CORE_PIN8_DDRREG	DDRB
+ 374:Lib/core_pins.h **** #define CORE_PIN9_DDRREG	DDRB
+ 375:Lib/core_pins.h **** #define CORE_PIN10_DDRREG	DDRB
+ 376:Lib/core_pins.h **** #define CORE_PIN11_DDRREG	DDRB
+ 377:Lib/core_pins.h **** #define CORE_PIN12_DDRREG	DDRB
+ 378:Lib/core_pins.h **** #define CORE_PIN13_DDRREG	DDRB
+ 379:Lib/core_pins.h **** #define CORE_PIN14_DDRREG	DDRB
+ 380:Lib/core_pins.h **** #define CORE_PIN15_DDRREG	DDRB
+ 381:Lib/core_pins.h **** #define CORE_PIN16_DDRREG	DDRC
+ 382:Lib/core_pins.h **** #define CORE_PIN17_DDRREG	DDRC
+ 383:Lib/core_pins.h **** #define CORE_PIN18_DDRREG	DDRC
+ 384:Lib/core_pins.h **** #define CORE_PIN19_DDRREG	DDRC
+ 385:Lib/core_pins.h **** #define CORE_PIN20_DDRREG	DDRC
+ 386:Lib/core_pins.h **** #define CORE_PIN0_PINREG	PIND
+ 387:Lib/core_pins.h **** #define CORE_PIN1_PINREG	PIND
+ 388:Lib/core_pins.h **** #define CORE_PIN2_PINREG	PIND
+ 389:Lib/core_pins.h **** #define CORE_PIN3_PINREG	PIND
+ 390:Lib/core_pins.h **** #define CORE_PIN4_PINREG	PIND
+ 391:Lib/core_pins.h **** #define CORE_PIN5_PINREG	PIND
+ 392:Lib/core_pins.h **** #define CORE_PIN6_PINREG	PIND
+ 393:Lib/core_pins.h **** #define CORE_PIN7_PINREG	PIND
+ 394:Lib/core_pins.h **** #define CORE_PIN8_PINREG	PINB
+ 395:Lib/core_pins.h **** #define CORE_PIN9_PINREG	PINB
+ 396:Lib/core_pins.h **** #define CORE_PIN10_PINREG	PINB
+ 397:Lib/core_pins.h **** #define CORE_PIN11_PINREG	PINB
+ 398:Lib/core_pins.h **** #define CORE_PIN12_PINREG	PINB
+ 399:Lib/core_pins.h **** #define CORE_PIN13_PINREG	PINB
+ 400:Lib/core_pins.h **** #define CORE_PIN14_PINREG	PINB
+ 401:Lib/core_pins.h **** #define CORE_PIN15_PINREG	PINB
+ 402:Lib/core_pins.h **** #define CORE_PIN16_PINREG	PINC
+ 403:Lib/core_pins.h **** #define CORE_PIN17_PINREG	PINC
+ 404:Lib/core_pins.h **** #define CORE_PIN18_PINREG	PINC
+ 405:Lib/core_pins.h **** #define CORE_PIN19_PINREG	PINC
+ 406:Lib/core_pins.h **** #define CORE_PIN20_PINREG	PINC
+ 407:Lib/core_pins.h **** #define CORE_T1_PIN		PIN_B4
+ 408:Lib/core_pins.h **** #define CORE_ICP1_PIN		PIN_C7
+ 409:Lib/core_pins.h **** #define CORE_OC0A_PIN		PIN_B7
+ 410:Lib/core_pins.h **** #define CORE_OC0B_PIN		PIN_D0
+ 411:Lib/core_pins.h **** #define CORE_OC1A_PIN		PIN_C6
+ 412:Lib/core_pins.h **** #define CORE_OC1B_PIN		PIN_C5
+ 413:Lib/core_pins.h **** #define CORE_OC1C_PIN		PIN_B7
+ 414:Lib/core_pins.h **** #define CORE_RXD1_PIN		PIN_D2
+ 415:Lib/core_pins.h **** #define CORE_TXD1_PIN		PIN_D3
+ 416:Lib/core_pins.h **** #define CORE_XCK1_PIN		PIN_D5
+ 417:Lib/core_pins.h **** #define CORE_INT0_PIN		PIN_D0
+ 418:Lib/core_pins.h **** #define CORE_INT1_PIN		PIN_D1
+ 419:Lib/core_pins.h **** #define CORE_INT2_PIN		PIN_D2
+ 420:Lib/core_pins.h **** #define CORE_INT3_PIN		PIN_D3
+ 421:Lib/core_pins.h **** #define CORE_INT4_PIN		PIN_C2
+ 422:Lib/core_pins.h **** #define CORE_INT5_PIN		PIN_D4
+ 423:Lib/core_pins.h **** #define CORE_INT6_PIN		PIN_D6
+ 424:Lib/core_pins.h **** #define CORE_INT7_PIN		PIN_D7
+ 425:Lib/core_pins.h **** #define CORE_SS0_PIN		PIN_B0
+ 426:Lib/core_pins.h **** #define CORE_MOSI0_PIN		PIN_B2
+ 427:Lib/core_pins.h **** #define CORE_MISO0_PIN		PIN_B3
+ 428:Lib/core_pins.h **** #define CORE_SCLK0_PIN		PIN_B1
+ 429:Lib/core_pins.h **** #define CORE_AIN0_PIN		PIN_D1
+ 430:Lib/core_pins.h **** #define CORE_AIN1_PIN		PIN_D2
+ 431:Lib/core_pins.h **** #define CORE_PCINT0_PIN		PIN_B0
+ 432:Lib/core_pins.h **** #define CORE_PCINT1_PIN		PIN_B1
+ 433:Lib/core_pins.h **** #define CORE_PCINT2_PIN		PIN_B2
+ 434:Lib/core_pins.h **** #define CORE_PCINT3_PIN		PIN_B3
+ 435:Lib/core_pins.h **** #define CORE_PCINT4_PIN		PIN_B4
+ 436:Lib/core_pins.h **** #define CORE_PCINT5_PIN		PIN_B5
+ 437:Lib/core_pins.h **** #define CORE_PCINT6_PIN		PIN_B6
+ 438:Lib/core_pins.h **** #define CORE_PCINT7_PIN		PIN_B7
+ 439:Lib/core_pins.h **** #define CORE_PCINT8_PIN		PIN_C6
+ 440:Lib/core_pins.h **** #define CORE_PCINT9_PIN		PIN_C5
+ 441:Lib/core_pins.h **** #define CORE_PCINT10_PIN	PIN_C4
+ 442:Lib/core_pins.h **** #define CORE_PCINT11_PIN	PIN_C2
+ 443:Lib/core_pins.h **** #define CORE_PCINT12_PIN	PIN_D5
+ 444:Lib/core_pins.h **** #define CORE_LED0_PIN		PIN_D6
+ 445:Lib/core_pins.h **** #define CORE_PWM0_PIN		CORE_OC0B_PIN	// D0, 0
+ 446:Lib/core_pins.h **** #define CORE_PWM1_PIN		CORE_OC1C_PIN	// B7, 15
+ 447:Lib/core_pins.h **** #define CORE_PWM2_PIN		CORE_OC1A_PIN	// C6, 17
+ 448:Lib/core_pins.h **** #define CORE_PWM3_PIN		CORE_OC1B_PIN	// C5, 18
+ 449:Lib/core_pins.h **** 
+ 450:Lib/core_pins.h **** 
+ 451:Lib/core_pins.h **** ////////////////////////////////////
+ 452:Lib/core_pins.h **** // Teensy++ 1.0 & 2.0
+ 453:Lib/core_pins.h **** ////////////////////////////////////
+ 454:Lib/core_pins.h **** #elif defined(__AVR_AT90USB646__) || defined(__AVR_AT90USB1286__)
+ 455:Lib/core_pins.h **** #define CORE_NUM_TOTAL_PINS	46
+ 456:Lib/core_pins.h **** #define CORE_NUM_DIGITAL	38
+ 457:Lib/core_pins.h **** #define CORE_NUM_ANALOG		8
+ 458:Lib/core_pins.h **** #define CORE_NUM_PWM		9
+ 459:Lib/core_pins.h **** #define CORE_NUM_INTERRUPT	8
+ 460:Lib/core_pins.h **** #define PIN_D0		0
+ 461:Lib/core_pins.h **** #define PIN_D1		1
+ 462:Lib/core_pins.h **** #define PIN_D2		2
+ 463:Lib/core_pins.h **** #define PIN_D3		3
+ 464:Lib/core_pins.h **** #define PIN_D4		4
+ 465:Lib/core_pins.h **** #define PIN_D5		5
+ 466:Lib/core_pins.h **** #define PIN_D6		6
+ 467:Lib/core_pins.h **** #define PIN_D7		7
+ 468:Lib/core_pins.h **** #define PIN_E0		8
+ 469:Lib/core_pins.h **** #define PIN_E1		9
+ 470:Lib/core_pins.h **** #define PIN_C0		10
+ 471:Lib/core_pins.h **** #define PIN_C1		11
+ 472:Lib/core_pins.h **** #define PIN_C2		12
+ 473:Lib/core_pins.h **** #define PIN_C3		13
+ 474:Lib/core_pins.h **** #define PIN_C4		14
+ 475:Lib/core_pins.h **** #define PIN_C5		15
+ 476:Lib/core_pins.h **** #define PIN_C6		16
+ 477:Lib/core_pins.h **** #define PIN_C7		17
+ 478:Lib/core_pins.h **** #define PIN_E6		18
+ 479:Lib/core_pins.h **** #define PIN_E7		19
+ 480:Lib/core_pins.h **** #define PIN_SS		20
+ 481:Lib/core_pins.h **** #define PIN_SCLK	21
+ 482:Lib/core_pins.h **** #define PIN_MOSI	22
+ 483:Lib/core_pins.h **** #define PIN_MISO	23
+ 484:Lib/core_pins.h **** #define PIN_B0		20
+ 485:Lib/core_pins.h **** #define PIN_B1		21
+ 486:Lib/core_pins.h **** #define PIN_B2		22
+ 487:Lib/core_pins.h **** #define PIN_B3		23
+ 488:Lib/core_pins.h **** #define PIN_B4		24
+ 489:Lib/core_pins.h **** #define PIN_B5		25
+ 490:Lib/core_pins.h **** #define PIN_B6		26
+ 491:Lib/core_pins.h **** #define PIN_B7		27
+ 492:Lib/core_pins.h **** #define PIN_A0		28
+ 493:Lib/core_pins.h **** #define PIN_A1		29
+ 494:Lib/core_pins.h **** #define PIN_A2		30
+ 495:Lib/core_pins.h **** #define PIN_A3		31
+ 496:Lib/core_pins.h **** #define PIN_A4		32
+ 497:Lib/core_pins.h **** #define PIN_A5		33
+ 498:Lib/core_pins.h **** #define PIN_A6		34
+ 499:Lib/core_pins.h **** #define PIN_A7		35
+ 500:Lib/core_pins.h **** #define PIN_E4		36
+ 501:Lib/core_pins.h **** #define PIN_E5		37
+ 502:Lib/core_pins.h **** #define PIN_F0		38
+ 503:Lib/core_pins.h **** #define PIN_F1		39
+ 504:Lib/core_pins.h **** #define PIN_F2		40
+ 505:Lib/core_pins.h **** #define PIN_F3		41
+ 506:Lib/core_pins.h **** #define PIN_F4		42
+ 507:Lib/core_pins.h **** #define PIN_F5		43
+ 508:Lib/core_pins.h **** #define PIN_F6		44
+ 509:Lib/core_pins.h **** #define PIN_F7		45
+ 510:Lib/core_pins.h **** #define CORE_PIN0_BIT		0
+ 511:Lib/core_pins.h **** #define CORE_PIN1_BIT		1
+ 512:Lib/core_pins.h **** #define CORE_PIN2_BIT		2
+ 513:Lib/core_pins.h **** #define CORE_PIN3_BIT		3
+ 514:Lib/core_pins.h **** #define CORE_PIN4_BIT		4
+ 515:Lib/core_pins.h **** #define CORE_PIN5_BIT		5
+ 516:Lib/core_pins.h **** #define CORE_PIN6_BIT		6
+ 517:Lib/core_pins.h **** #define CORE_PIN7_BIT		7
+ 518:Lib/core_pins.h **** #define CORE_PIN8_BIT		0
+ 519:Lib/core_pins.h **** #define CORE_PIN9_BIT		1
+ 520:Lib/core_pins.h **** #define CORE_PIN10_BIT		0
+ 521:Lib/core_pins.h **** #define CORE_PIN11_BIT		1
+ 522:Lib/core_pins.h **** #define CORE_PIN12_BIT		2
+ 523:Lib/core_pins.h **** #define CORE_PIN13_BIT		3
+ 524:Lib/core_pins.h **** #define CORE_PIN14_BIT		4
+ 525:Lib/core_pins.h **** #define CORE_PIN15_BIT		5
+ 526:Lib/core_pins.h **** #define CORE_PIN16_BIT		6
+ 527:Lib/core_pins.h **** #define CORE_PIN17_BIT		7
+ 528:Lib/core_pins.h **** #define CORE_PIN18_BIT		6
+ 529:Lib/core_pins.h **** #define CORE_PIN19_BIT		7
+ 530:Lib/core_pins.h **** #define CORE_PIN20_BIT		0
+ 531:Lib/core_pins.h **** #define CORE_PIN21_BIT		1
+ 532:Lib/core_pins.h **** #define CORE_PIN22_BIT		2
+ 533:Lib/core_pins.h **** #define CORE_PIN23_BIT		3
+ 534:Lib/core_pins.h **** #define CORE_PIN24_BIT		4
+ 535:Lib/core_pins.h **** #define CORE_PIN25_BIT		5
+ 536:Lib/core_pins.h **** #define CORE_PIN26_BIT		6
+ 537:Lib/core_pins.h **** #define CORE_PIN27_BIT		7
+ 538:Lib/core_pins.h **** #define CORE_PIN28_BIT		0
+ 539:Lib/core_pins.h **** #define CORE_PIN29_BIT		1
+ 540:Lib/core_pins.h **** #define CORE_PIN30_BIT		2
+ 541:Lib/core_pins.h **** #define CORE_PIN31_BIT		3
+ 542:Lib/core_pins.h **** #define CORE_PIN32_BIT		4
+ 543:Lib/core_pins.h **** #define CORE_PIN33_BIT		5
+ 544:Lib/core_pins.h **** #define CORE_PIN34_BIT		6
+ 545:Lib/core_pins.h **** #define CORE_PIN35_BIT		7
+ 546:Lib/core_pins.h **** #define CORE_PIN36_BIT		4
+ 547:Lib/core_pins.h **** #define CORE_PIN37_BIT		5
+ 548:Lib/core_pins.h **** #define CORE_PIN38_BIT		0
+ 549:Lib/core_pins.h **** #define CORE_PIN39_BIT		1
+ 550:Lib/core_pins.h **** #define CORE_PIN40_BIT		2
+ 551:Lib/core_pins.h **** #define CORE_PIN41_BIT		3
+ 552:Lib/core_pins.h **** #define CORE_PIN42_BIT		4
+ 553:Lib/core_pins.h **** #define CORE_PIN43_BIT		5
+ 554:Lib/core_pins.h **** #define CORE_PIN44_BIT		6
+ 555:Lib/core_pins.h **** #define CORE_PIN45_BIT		7
+ 556:Lib/core_pins.h **** #define CORE_PIN0_BITMASK	_BV(CORE_PIN0_BIT)
+ 557:Lib/core_pins.h **** #define CORE_PIN1_BITMASK	_BV(CORE_PIN1_BIT)
+ 558:Lib/core_pins.h **** #define CORE_PIN2_BITMASK	_BV(CORE_PIN2_BIT)
+ 559:Lib/core_pins.h **** #define CORE_PIN3_BITMASK	_BV(CORE_PIN3_BIT)
+ 560:Lib/core_pins.h **** #define CORE_PIN4_BITMASK	_BV(CORE_PIN4_BIT)
+ 561:Lib/core_pins.h **** #define CORE_PIN5_BITMASK	_BV(CORE_PIN5_BIT)
+ 562:Lib/core_pins.h **** #define CORE_PIN6_BITMASK	_BV(CORE_PIN6_BIT)
+ 563:Lib/core_pins.h **** #define CORE_PIN7_BITMASK	_BV(CORE_PIN7_BIT)
+ 564:Lib/core_pins.h **** #define CORE_PIN8_BITMASK	_BV(CORE_PIN8_BIT)
+ 565:Lib/core_pins.h **** #define CORE_PIN9_BITMASK	_BV(CORE_PIN9_BIT)
+ 566:Lib/core_pins.h **** #define CORE_PIN10_BITMASK	_BV(CORE_PIN10_BIT)
+ 567:Lib/core_pins.h **** #define CORE_PIN11_BITMASK	_BV(CORE_PIN11_BIT)
+ 568:Lib/core_pins.h **** #define CORE_PIN12_BITMASK	_BV(CORE_PIN12_BIT)
+ 569:Lib/core_pins.h **** #define CORE_PIN13_BITMASK	_BV(CORE_PIN13_BIT)
+ 570:Lib/core_pins.h **** #define CORE_PIN14_BITMASK	_BV(CORE_PIN14_BIT)
+ 571:Lib/core_pins.h **** #define CORE_PIN15_BITMASK	_BV(CORE_PIN15_BIT)
+ 572:Lib/core_pins.h **** #define CORE_PIN16_BITMASK	_BV(CORE_PIN16_BIT)
+ 573:Lib/core_pins.h **** #define CORE_PIN17_BITMASK	_BV(CORE_PIN17_BIT)
+ 574:Lib/core_pins.h **** #define CORE_PIN18_BITMASK	_BV(CORE_PIN18_BIT)
+ 575:Lib/core_pins.h **** #define CORE_PIN19_BITMASK	_BV(CORE_PIN19_BIT)
+ 576:Lib/core_pins.h **** #define CORE_PIN20_BITMASK	_BV(CORE_PIN20_BIT)
+ 577:Lib/core_pins.h **** #define CORE_PIN21_BITMASK	_BV(CORE_PIN21_BIT)
+ 578:Lib/core_pins.h **** #define CORE_PIN22_BITMASK	_BV(CORE_PIN22_BIT)
+ 579:Lib/core_pins.h **** #define CORE_PIN23_BITMASK	_BV(CORE_PIN23_BIT)
+ 580:Lib/core_pins.h **** #define CORE_PIN24_BITMASK	_BV(CORE_PIN24_BIT)
+ 581:Lib/core_pins.h **** #define CORE_PIN25_BITMASK	_BV(CORE_PIN25_BIT)
+ 582:Lib/core_pins.h **** #define CORE_PIN26_BITMASK	_BV(CORE_PIN26_BIT)
+ 583:Lib/core_pins.h **** #define CORE_PIN27_BITMASK	_BV(CORE_PIN27_BIT)
+ 584:Lib/core_pins.h **** #define CORE_PIN28_BITMASK	_BV(CORE_PIN28_BIT)
+ 585:Lib/core_pins.h **** #define CORE_PIN29_BITMASK	_BV(CORE_PIN29_BIT)
+ 586:Lib/core_pins.h **** #define CORE_PIN30_BITMASK	_BV(CORE_PIN30_BIT)
+ 587:Lib/core_pins.h **** #define CORE_PIN31_BITMASK	_BV(CORE_PIN31_BIT)
+ 588:Lib/core_pins.h **** #define CORE_PIN32_BITMASK	_BV(CORE_PIN32_BIT)
+ 589:Lib/core_pins.h **** #define CORE_PIN33_BITMASK	_BV(CORE_PIN33_BIT)
+ 590:Lib/core_pins.h **** #define CORE_PIN34_BITMASK	_BV(CORE_PIN34_BIT)
+ 591:Lib/core_pins.h **** #define CORE_PIN35_BITMASK	_BV(CORE_PIN35_BIT)
+ 592:Lib/core_pins.h **** #define CORE_PIN36_BITMASK	_BV(CORE_PIN36_BIT)
+ 593:Lib/core_pins.h **** #define CORE_PIN37_BITMASK	_BV(CORE_PIN37_BIT)
+ 594:Lib/core_pins.h **** #define CORE_PIN38_BITMASK	_BV(CORE_PIN38_BIT)
+ 595:Lib/core_pins.h **** #define CORE_PIN39_BITMASK	_BV(CORE_PIN39_BIT)
+ 596:Lib/core_pins.h **** #define CORE_PIN40_BITMASK	_BV(CORE_PIN40_BIT)
+ 597:Lib/core_pins.h **** #define CORE_PIN41_BITMASK	_BV(CORE_PIN41_BIT)
+ 598:Lib/core_pins.h **** #define CORE_PIN42_BITMASK	_BV(CORE_PIN42_BIT)
+ 599:Lib/core_pins.h **** #define CORE_PIN43_BITMASK	_BV(CORE_PIN43_BIT)
+ 600:Lib/core_pins.h **** #define CORE_PIN44_BITMASK	_BV(CORE_PIN44_BIT)
+ 601:Lib/core_pins.h **** #define CORE_PIN45_BITMASK	_BV(CORE_PIN45_BIT)
+ 602:Lib/core_pins.h **** #define CORE_PIN0_PORTREG	PORTD
+ 603:Lib/core_pins.h **** #define CORE_PIN1_PORTREG	PORTD
+ 604:Lib/core_pins.h **** #define CORE_PIN2_PORTREG	PORTD
+ 605:Lib/core_pins.h **** #define CORE_PIN3_PORTREG	PORTD
+ 606:Lib/core_pins.h **** #define CORE_PIN4_PORTREG	PORTD
+ 607:Lib/core_pins.h **** #define CORE_PIN5_PORTREG	PORTD
+ 608:Lib/core_pins.h **** #define CORE_PIN6_PORTREG	PORTD
+ 609:Lib/core_pins.h **** #define CORE_PIN7_PORTREG	PORTD
+ 610:Lib/core_pins.h **** #define CORE_PIN8_PORTREG	PORTE
+ 611:Lib/core_pins.h **** #define CORE_PIN9_PORTREG	PORTE
+ 612:Lib/core_pins.h **** #define CORE_PIN10_PORTREG	PORTC
+ 613:Lib/core_pins.h **** #define CORE_PIN11_PORTREG	PORTC
+ 614:Lib/core_pins.h **** #define CORE_PIN12_PORTREG	PORTC
+ 615:Lib/core_pins.h **** #define CORE_PIN13_PORTREG	PORTC
+ 616:Lib/core_pins.h **** #define CORE_PIN14_PORTREG	PORTC
+ 617:Lib/core_pins.h **** #define CORE_PIN15_PORTREG	PORTC
+ 618:Lib/core_pins.h **** #define CORE_PIN16_PORTREG	PORTC
+ 619:Lib/core_pins.h **** #define CORE_PIN17_PORTREG	PORTC
+ 620:Lib/core_pins.h **** #define CORE_PIN18_PORTREG	PORTE
+ 621:Lib/core_pins.h **** #define CORE_PIN19_PORTREG	PORTE
+ 622:Lib/core_pins.h **** #define CORE_PIN20_PORTREG	PORTB
+ 623:Lib/core_pins.h **** #define CORE_PIN21_PORTREG	PORTB
+ 624:Lib/core_pins.h **** #define CORE_PIN22_PORTREG	PORTB
+ 625:Lib/core_pins.h **** #define CORE_PIN23_PORTREG	PORTB
+ 626:Lib/core_pins.h **** #define CORE_PIN24_PORTREG	PORTB
+ 627:Lib/core_pins.h **** #define CORE_PIN25_PORTREG	PORTB
+ 628:Lib/core_pins.h **** #define CORE_PIN26_PORTREG	PORTB
+ 629:Lib/core_pins.h **** #define CORE_PIN27_PORTREG	PORTB
+ 630:Lib/core_pins.h **** #define CORE_PIN28_PORTREG	PORTA
+ 631:Lib/core_pins.h **** #define CORE_PIN29_PORTREG	PORTA
+ 632:Lib/core_pins.h **** #define CORE_PIN30_PORTREG	PORTA
+ 633:Lib/core_pins.h **** #define CORE_PIN31_PORTREG	PORTA
+ 634:Lib/core_pins.h **** #define CORE_PIN32_PORTREG	PORTA
+ 635:Lib/core_pins.h **** #define CORE_PIN33_PORTREG	PORTA
+ 636:Lib/core_pins.h **** #define CORE_PIN34_PORTREG	PORTA
+ 637:Lib/core_pins.h **** #define CORE_PIN35_PORTREG	PORTA
+ 638:Lib/core_pins.h **** #define CORE_PIN36_PORTREG	PORTE
+ 639:Lib/core_pins.h **** #define CORE_PIN37_PORTREG	PORTE
+ 640:Lib/core_pins.h **** #define CORE_PIN38_PORTREG	PORTF
+ 641:Lib/core_pins.h **** #define CORE_PIN39_PORTREG	PORTF
+ 642:Lib/core_pins.h **** #define CORE_PIN40_PORTREG	PORTF
+ 643:Lib/core_pins.h **** #define CORE_PIN41_PORTREG	PORTF
+ 644:Lib/core_pins.h **** #define CORE_PIN42_PORTREG	PORTF
+ 645:Lib/core_pins.h **** #define CORE_PIN43_PORTREG	PORTF
+ 646:Lib/core_pins.h **** #define CORE_PIN44_PORTREG	PORTF
+ 647:Lib/core_pins.h **** #define CORE_PIN45_PORTREG	PORTF
+ 648:Lib/core_pins.h **** #define CORE_PIN0_DDRREG	DDRD
+ 649:Lib/core_pins.h **** #define CORE_PIN1_DDRREG	DDRD
+ 650:Lib/core_pins.h **** #define CORE_PIN2_DDRREG	DDRD
+ 651:Lib/core_pins.h **** #define CORE_PIN3_DDRREG	DDRD
+ 652:Lib/core_pins.h **** #define CORE_PIN4_DDRREG	DDRD
+ 653:Lib/core_pins.h **** #define CORE_PIN5_DDRREG	DDRD
+ 654:Lib/core_pins.h **** #define CORE_PIN6_DDRREG	DDRD
+ 655:Lib/core_pins.h **** #define CORE_PIN7_DDRREG	DDRD
+ 656:Lib/core_pins.h **** #define CORE_PIN8_DDRREG	DDRE
+ 657:Lib/core_pins.h **** #define CORE_PIN9_DDRREG	DDRE
+ 658:Lib/core_pins.h **** #define CORE_PIN10_DDRREG	DDRC
+ 659:Lib/core_pins.h **** #define CORE_PIN11_DDRREG	DDRC
+ 660:Lib/core_pins.h **** #define CORE_PIN12_DDRREG	DDRC
+ 661:Lib/core_pins.h **** #define CORE_PIN13_DDRREG	DDRC
+ 662:Lib/core_pins.h **** #define CORE_PIN14_DDRREG	DDRC
+ 663:Lib/core_pins.h **** #define CORE_PIN15_DDRREG	DDRC
+ 664:Lib/core_pins.h **** #define CORE_PIN16_DDRREG	DDRC
+ 665:Lib/core_pins.h **** #define CORE_PIN17_DDRREG	DDRC
+ 666:Lib/core_pins.h **** #define CORE_PIN18_DDRREG	DDRE
+ 667:Lib/core_pins.h **** #define CORE_PIN19_DDRREG	DDRE
+ 668:Lib/core_pins.h **** #define CORE_PIN20_DDRREG	DDRB
+ 669:Lib/core_pins.h **** #define CORE_PIN21_DDRREG	DDRB
+ 670:Lib/core_pins.h **** #define CORE_PIN22_DDRREG	DDRB
+ 671:Lib/core_pins.h **** #define CORE_PIN23_DDRREG	DDRB
+ 672:Lib/core_pins.h **** #define CORE_PIN24_DDRREG	DDRB
+ 673:Lib/core_pins.h **** #define CORE_PIN25_DDRREG	DDRB
+ 674:Lib/core_pins.h **** #define CORE_PIN26_DDRREG	DDRB
+ 675:Lib/core_pins.h **** #define CORE_PIN27_DDRREG	DDRB
+ 676:Lib/core_pins.h **** #define CORE_PIN28_DDRREG	DDRA
+ 677:Lib/core_pins.h **** #define CORE_PIN29_DDRREG	DDRA
+ 678:Lib/core_pins.h **** #define CORE_PIN30_DDRREG	DDRA
+ 679:Lib/core_pins.h **** #define CORE_PIN31_DDRREG	DDRA
+ 680:Lib/core_pins.h **** #define CORE_PIN32_DDRREG	DDRA
+ 681:Lib/core_pins.h **** #define CORE_PIN33_DDRREG	DDRA
+ 682:Lib/core_pins.h **** #define CORE_PIN34_DDRREG	DDRA
+ 683:Lib/core_pins.h **** #define CORE_PIN35_DDRREG	DDRA
+ 684:Lib/core_pins.h **** #define CORE_PIN36_DDRREG	DDRE
+ 685:Lib/core_pins.h **** #define CORE_PIN37_DDRREG	DDRE
+ 686:Lib/core_pins.h **** #define CORE_PIN38_DDRREG	DDRF
+ 687:Lib/core_pins.h **** #define CORE_PIN39_DDRREG	DDRF
+ 688:Lib/core_pins.h **** #define CORE_PIN40_DDRREG	DDRF
+ 689:Lib/core_pins.h **** #define CORE_PIN41_DDRREG	DDRF
+ 690:Lib/core_pins.h **** #define CORE_PIN42_DDRREG	DDRF
+ 691:Lib/core_pins.h **** #define CORE_PIN43_DDRREG	DDRF
+ 692:Lib/core_pins.h **** #define CORE_PIN44_DDRREG	DDRF
+ 693:Lib/core_pins.h **** #define CORE_PIN45_DDRREG	DDRF
+ 694:Lib/core_pins.h **** #define CORE_PIN0_PINREG	PIND
+ 695:Lib/core_pins.h **** #define CORE_PIN1_PINREG	PIND
+ 696:Lib/core_pins.h **** #define CORE_PIN2_PINREG	PIND
+ 697:Lib/core_pins.h **** #define CORE_PIN3_PINREG	PIND
+ 698:Lib/core_pins.h **** #define CORE_PIN4_PINREG	PIND
+ 699:Lib/core_pins.h **** #define CORE_PIN5_PINREG	PIND
+ 700:Lib/core_pins.h **** #define CORE_PIN6_PINREG	PIND
+ 701:Lib/core_pins.h **** #define CORE_PIN7_PINREG	PIND
+ 702:Lib/core_pins.h **** #define CORE_PIN8_PINREG	PINE
+ 703:Lib/core_pins.h **** #define CORE_PIN9_PINREG	PINE
+ 704:Lib/core_pins.h **** #define CORE_PIN10_PINREG	PINC
+ 705:Lib/core_pins.h **** #define CORE_PIN11_PINREG	PINC
+ 706:Lib/core_pins.h **** #define CORE_PIN12_PINREG	PINC
+ 707:Lib/core_pins.h **** #define CORE_PIN13_PINREG	PINC
+ 708:Lib/core_pins.h **** #define CORE_PIN14_PINREG	PINC
+ 709:Lib/core_pins.h **** #define CORE_PIN15_PINREG	PINC
+ 710:Lib/core_pins.h **** #define CORE_PIN16_PINREG	PINC
+ 711:Lib/core_pins.h **** #define CORE_PIN17_PINREG	PINC
+ 712:Lib/core_pins.h **** #define CORE_PIN18_PINREG	PINE
+ 713:Lib/core_pins.h **** #define CORE_PIN19_PINREG	PINE
+ 714:Lib/core_pins.h **** #define CORE_PIN20_PINREG	PINB
+ 715:Lib/core_pins.h **** #define CORE_PIN21_PINREG	PINB
+ 716:Lib/core_pins.h **** #define CORE_PIN22_PINREG	PINB
+ 717:Lib/core_pins.h **** #define CORE_PIN23_PINREG	PINB
+ 718:Lib/core_pins.h **** #define CORE_PIN24_PINREG	PINB
+ 719:Lib/core_pins.h **** #define CORE_PIN25_PINREG	PINB
+ 720:Lib/core_pins.h **** #define CORE_PIN26_PINREG	PINB
+ 721:Lib/core_pins.h **** #define CORE_PIN27_PINREG	PINB
+ 722:Lib/core_pins.h **** #define CORE_PIN28_PINREG	PINA
+ 723:Lib/core_pins.h **** #define CORE_PIN29_PINREG	PINA
+ 724:Lib/core_pins.h **** #define CORE_PIN30_PINREG	PINA
+ 725:Lib/core_pins.h **** #define CORE_PIN31_PINREG	PINA
+ 726:Lib/core_pins.h **** #define CORE_PIN32_PINREG	PINA
+ 727:Lib/core_pins.h **** #define CORE_PIN33_PINREG	PINA
+ 728:Lib/core_pins.h **** #define CORE_PIN34_PINREG	PINA
+ 729:Lib/core_pins.h **** #define CORE_PIN35_PINREG	PINA
+ 730:Lib/core_pins.h **** #define CORE_PIN36_PINREG	PINE
+ 731:Lib/core_pins.h **** #define CORE_PIN37_PINREG	PINE
+ 732:Lib/core_pins.h **** #define CORE_PIN38_PINREG	PINF
+ 733:Lib/core_pins.h **** #define CORE_PIN39_PINREG	PINF
+ 734:Lib/core_pins.h **** #define CORE_PIN40_PINREG	PINF
+ 735:Lib/core_pins.h **** #define CORE_PIN41_PINREG	PINF
+ 736:Lib/core_pins.h **** #define CORE_PIN42_PINREG	PINF
+ 737:Lib/core_pins.h **** #define CORE_PIN43_PINREG	PINF
+ 738:Lib/core_pins.h **** #define CORE_PIN44_PINREG	PINF
+ 739:Lib/core_pins.h **** #define CORE_PIN45_PINREG	PINF
+ 740:Lib/core_pins.h **** #define CORE_ADC0_PIN		PIN_F0
+ 741:Lib/core_pins.h **** #define CORE_ADC1_PIN		PIN_F1
+ 742:Lib/core_pins.h **** #define CORE_ADC2_PIN		PIN_F2
+ 743:Lib/core_pins.h **** #define CORE_ADC3_PIN		PIN_F3
+ 744:Lib/core_pins.h **** #define CORE_ADC4_PIN		PIN_F4
+ 745:Lib/core_pins.h **** #define CORE_ADC5_PIN		PIN_F5
+ 746:Lib/core_pins.h **** #define CORE_ADC6_PIN		PIN_F6
+ 747:Lib/core_pins.h **** #define CORE_ADC7_PIN		PIN_F7
+ 748:Lib/core_pins.h **** #define CORE_RXD1_PIN           PIN_D2
+ 749:Lib/core_pins.h **** #define CORE_TXD1_PIN           PIN_D3
+ 750:Lib/core_pins.h **** #define CORE_XCK1_PIN           PIN_D5
+ 751:Lib/core_pins.h **** #define CORE_SDA0_PIN           PIN_D1
+ 752:Lib/core_pins.h **** #define CORE_SCL0_PIN           PIN_D0
+ 753:Lib/core_pins.h **** #define CORE_INT0_PIN           PIN_D0
+ 754:Lib/core_pins.h **** #define CORE_INT1_PIN           PIN_D1
+ 755:Lib/core_pins.h **** #define CORE_INT2_PIN           PIN_D2
+ 756:Lib/core_pins.h **** #define CORE_INT3_PIN           PIN_D3
+ 757:Lib/core_pins.h **** #define CORE_INT4_PIN           PIN_E4
+ 758:Lib/core_pins.h **** #define CORE_INT5_PIN           PIN_E5
+ 759:Lib/core_pins.h **** #define CORE_INT6_PIN           PIN_E6
+ 760:Lib/core_pins.h **** #define CORE_INT7_PIN           PIN_E7
+ 761:Lib/core_pins.h **** #define CORE_SS0_PIN            PIN_B0
+ 762:Lib/core_pins.h **** #define CORE_MOSI0_PIN          PIN_B2
+ 763:Lib/core_pins.h **** #define CORE_MISO0_PIN          PIN_B3
+ 764:Lib/core_pins.h **** #define CORE_SCLK0_PIN          PIN_B1
+ 765:Lib/core_pins.h **** #define CORE_T0_PIN             PIN_D7
+ 766:Lib/core_pins.h **** #define CORE_T1_PIN             PIN_D6
+ 767:Lib/core_pins.h **** #define CORE_ICP1_PIN           PIN_D4
+ 768:Lib/core_pins.h **** #define CORE_ICP3_PIN           PIN_C7
+ 769:Lib/core_pins.h **** #define CORE_OC0A_PIN           PIN_B7
+ 770:Lib/core_pins.h **** #define CORE_OC0B_PIN           PIN_D0
+ 771:Lib/core_pins.h **** #define CORE_OC1A_PIN           PIN_B5
+ 772:Lib/core_pins.h **** #define CORE_OC1B_PIN           PIN_B6
+ 773:Lib/core_pins.h **** #define CORE_OC1C_PIN           PIN_B7
+ 774:Lib/core_pins.h **** #define CORE_OC2A_PIN           PIN_B4
+ 775:Lib/core_pins.h **** #define CORE_OC2B_PIN           PIN_D1
+ 776:Lib/core_pins.h **** #define CORE_OC3A_PIN           PIN_C6
+ 777:Lib/core_pins.h **** #define CORE_OC3B_PIN           PIN_C5
+ 778:Lib/core_pins.h **** #define CORE_OC3C_PIN           PIN_C4
+ 779:Lib/core_pins.h **** #define CORE_PCINT0_PIN		PIN_B0
+ 780:Lib/core_pins.h **** #define CORE_PCINT1_PIN		PIN_B1
+ 781:Lib/core_pins.h **** #define CORE_PCINT2_PIN		PIN_B2
+ 782:Lib/core_pins.h **** #define CORE_PCINT3_PIN		PIN_B3
+ 783:Lib/core_pins.h **** #define CORE_PCINT4_PIN		PIN_B4
+ 784:Lib/core_pins.h **** #define CORE_PCINT5_PIN		PIN_B5
+ 785:Lib/core_pins.h **** #define CORE_PCINT6_PIN		PIN_B6
+ 786:Lib/core_pins.h **** #define CORE_PCINT7_PIN		PIN_B7
+ 787:Lib/core_pins.h **** #define CORE_LED0_PIN		PIN_D6
+ 788:Lib/core_pins.h **** #define CORE_PWM0_PIN		CORE_OC0B_PIN	// D0, 0
+ 789:Lib/core_pins.h **** #define CORE_PWM1_PIN		CORE_OC2B_PIN	// D1, 1
+ 790:Lib/core_pins.h **** #define CORE_PWM2_PIN		CORE_OC3C_PIN	// C4, 14
+ 791:Lib/core_pins.h **** #define CORE_PWM3_PIN		CORE_OC3B_PIN	// C5, 15
+ 792:Lib/core_pins.h **** #define CORE_PWM4_PIN		CORE_OC3A_PIN	// C6, 16
+ 793:Lib/core_pins.h **** #define CORE_PWM5_PIN		CORE_OC2A_PIN	// B4, 24
+ 794:Lib/core_pins.h **** #define CORE_PWM6_PIN		CORE_OC1A_PIN	// B5, 25
+ 795:Lib/core_pins.h **** #define CORE_PWM7_PIN		CORE_OC1B_PIN	// B6, 26
+ 796:Lib/core_pins.h **** #define CORE_PWM8_PIN		CORE_OC1C_PIN	// B7, 27
+ 797:Lib/core_pins.h **** #define CORE_ANALOG0_PIN	PIN_F0
+ 798:Lib/core_pins.h **** #define CORE_ANALOG1_PIN	PIN_F1
+ 799:Lib/core_pins.h **** #define CORE_ANALOG2_PIN	PIN_F2
+ 800:Lib/core_pins.h **** #define CORE_ANALOG3_PIN	PIN_F3
+ 801:Lib/core_pins.h **** #define CORE_ANALOG4_PIN	PIN_F4
+ 802:Lib/core_pins.h **** #define CORE_ANALOG5_PIN	PIN_F5
+ 803:Lib/core_pins.h **** #define CORE_ANALOG6_PIN	PIN_F6
+ 804:Lib/core_pins.h **** #define CORE_ANALOG7_PIN	PIN_F7
+ 805:Lib/core_pins.h **** 
+ 806:Lib/core_pins.h **** #endif
+ 807:Lib/core_pins.h **** 
+ 808:Lib/core_pins.h **** 
+ 809:Lib/core_pins.h **** #define CORE_BIT(pin) CORE_PIN_CONCATENATE(pin, BIT)
+ 810:Lib/core_pins.h **** #define CORE_BITMASK(pin) CORE_PIN_CONCATENATE(pin, BITMASK)
+ 811:Lib/core_pins.h **** #define CORE_PORTREG(pin) CORE_PIN_CONCATENATE(pin, PORTREG)
+ 812:Lib/core_pins.h **** #define CORE_DDRREG(pin) CORE_PIN_CONCATENATE(pin, DDRREG)
+ 813:Lib/core_pins.h **** #define CORE_PINREG(pin) CORE_PIN_CONCATENATE(pin, PINREG)
+ 814:Lib/core_pins.h **** #define CORE_PIN_CONCATENATE(pin, reg) (CORE_PIN ## pin ## _ ## reg)
+ 815:Lib/core_pins.h **** 
+ 816:Lib/core_pins.h **** #ifdef __cplusplus
+ 817:Lib/core_pins.h **** extern "C"{
+ 818:Lib/core_pins.h **** #endif
+ 819:Lib/core_pins.h **** 
+ 820:Lib/core_pins.h **** 
+ 821:Lib/core_pins.h **** extern void _digitalWrite(void);
+ 822:Lib/core_pins.h **** extern void _digitalWrite_HIGH(void);
+ 823:Lib/core_pins.h **** extern void _digitalWrite_LOW(void);
+ 824:Lib/core_pins.h **** 
+ 825:Lib/core_pins.h **** static inline void digitalWrite(uint8_t, uint8_t) __attribute__((always_inline, unused));
+ 826:Lib/core_pins.h **** static inline void digitalWrite(uint8_t pin, uint8_t val)
+ 827:Lib/core_pins.h **** {
+ 828:Lib/core_pins.h **** 	if (__builtin_constant_p(pin)) {
+ 829:Lib/core_pins.h **** 		if (val) {
+ 830:Lib/core_pins.h **** 			if (pin == 0) {
+ 831:Lib/core_pins.h **** 				CORE_PIN0_PORTREG |= CORE_PIN0_BITMASK;
+ 832:Lib/core_pins.h **** 			} else if (pin == 1) {
+ 833:Lib/core_pins.h **** 				CORE_PIN1_PORTREG |= CORE_PIN1_BITMASK;
+ 834:Lib/core_pins.h **** 			} else if (pin == 2) {
+ 835:Lib/core_pins.h **** 				CORE_PIN2_PORTREG |= CORE_PIN2_BITMASK;
+ 836:Lib/core_pins.h **** 			} else if (pin == 3) {
+ 837:Lib/core_pins.h **** 				CORE_PIN3_PORTREG |= CORE_PIN3_BITMASK;
+ 838:Lib/core_pins.h **** 			} else if (pin == 4) {
+ 839:Lib/core_pins.h **** 				CORE_PIN4_PORTREG |= CORE_PIN4_BITMASK;
+ 840:Lib/core_pins.h **** 			} else if (pin == 5) {
+ 841:Lib/core_pins.h **** 				CORE_PIN5_PORTREG |= CORE_PIN5_BITMASK;
+ 842:Lib/core_pins.h **** 			} else if (pin == 6) {
+ 843:Lib/core_pins.h **** 				CORE_PIN6_PORTREG |= CORE_PIN6_BITMASK;
+ 844:Lib/core_pins.h **** 			} else if (pin == 7) {
+ 845:Lib/core_pins.h **** 				CORE_PIN7_PORTREG |= CORE_PIN7_BITMASK;
+ 846:Lib/core_pins.h **** 			} else if (pin == 8) {
+ 847:Lib/core_pins.h **** 				CORE_PIN8_PORTREG |= CORE_PIN8_BITMASK;
+ 848:Lib/core_pins.h **** 			} else if (pin == 9) {
+ 849:Lib/core_pins.h **** 				CORE_PIN9_PORTREG |= CORE_PIN9_BITMASK;
+ 850:Lib/core_pins.h **** 			} else if (pin == 10) {
+ 851:Lib/core_pins.h **** 				CORE_PIN10_PORTREG |= CORE_PIN10_BITMASK;
+ 852:Lib/core_pins.h **** 			} else if (pin == 11) {
+ 853:Lib/core_pins.h **** 				CORE_PIN11_PORTREG |= CORE_PIN11_BITMASK;
+ 854:Lib/core_pins.h **** 			} else if (pin == 12) {
+ 855:Lib/core_pins.h **** 				CORE_PIN12_PORTREG |= CORE_PIN12_BITMASK;
+ 856:Lib/core_pins.h **** 			} else if (pin == 13) {
+ 857:Lib/core_pins.h **** 				CORE_PIN13_PORTREG |= CORE_PIN13_BITMASK;
+ 858:Lib/core_pins.h **** 			} else if (pin == 14) {
+ 859:Lib/core_pins.h **** 				CORE_PIN14_PORTREG |= CORE_PIN14_BITMASK;
+ 860:Lib/core_pins.h **** 			} else if (pin == 15) {
+ 861:Lib/core_pins.h **** 				CORE_PIN15_PORTREG |= CORE_PIN15_BITMASK;
+ 862:Lib/core_pins.h **** 			} else if (pin == 16) {
+ 863:Lib/core_pins.h **** 				CORE_PIN16_PORTREG |= CORE_PIN16_BITMASK;
+ 864:Lib/core_pins.h **** 			} else if (pin == 17) {
+ 865:Lib/core_pins.h **** 				CORE_PIN17_PORTREG |= CORE_PIN17_BITMASK;
+ 866:Lib/core_pins.h **** 			} else if (pin == 18) {
+ 867:Lib/core_pins.h **** 				CORE_PIN18_PORTREG |= CORE_PIN18_BITMASK;
+ 868:Lib/core_pins.h **** 			} else if (pin == 19) {
+ 869:Lib/core_pins.h **** 				CORE_PIN19_PORTREG |= CORE_PIN19_BITMASK;
+ 870:Lib/core_pins.h **** 			} else if (pin == 20) {
+ 871:Lib/core_pins.h **** 				CORE_PIN20_PORTREG |= CORE_PIN20_BITMASK;
+ 872:Lib/core_pins.h **** 			}
+ 873:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 21
+ 874:Lib/core_pins.h **** 			  else if (pin == 21) {
+ 875:Lib/core_pins.h **** 				CORE_PIN21_PORTREG |= CORE_PIN21_BITMASK;
+ 876:Lib/core_pins.h **** 			} else if (pin == 22) {
+ 877:Lib/core_pins.h **** 				CORE_PIN22_PORTREG |= CORE_PIN22_BITMASK;
+ 878:Lib/core_pins.h **** 			} else if (pin == 23) {
+ 879:Lib/core_pins.h **** 				CORE_PIN23_PORTREG |= CORE_PIN23_BITMASK;
+ 880:Lib/core_pins.h **** 			} else if (pin == 24) {
+ 881:Lib/core_pins.h **** 				CORE_PIN24_PORTREG |= CORE_PIN24_BITMASK;
+ 882:Lib/core_pins.h **** 			}
+ 883:Lib/core_pins.h **** 			#endif
+ 884:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 25
+ 885:Lib/core_pins.h **** 			  else if (pin == 25) {
+ 886:Lib/core_pins.h **** 				CORE_PIN25_PORTREG |= CORE_PIN25_BITMASK;
+ 887:Lib/core_pins.h **** 			} else if (pin == 26) {
+ 888:Lib/core_pins.h **** 				CORE_PIN26_PORTREG |= CORE_PIN26_BITMASK;
+ 889:Lib/core_pins.h **** 			} else if (pin == 27) {
+ 890:Lib/core_pins.h **** 				CORE_PIN27_PORTREG |= CORE_PIN27_BITMASK;
+ 891:Lib/core_pins.h **** 			} else if (pin == 28) {
+ 892:Lib/core_pins.h **** 				CORE_PIN28_PORTREG |= CORE_PIN28_BITMASK;
+ 893:Lib/core_pins.h **** 			} else if (pin == 29) {
+ 894:Lib/core_pins.h **** 				CORE_PIN29_PORTREG |= CORE_PIN29_BITMASK;
+ 895:Lib/core_pins.h **** 			} else if (pin == 30) {
+ 896:Lib/core_pins.h **** 				CORE_PIN30_PORTREG |= CORE_PIN30_BITMASK;
+ 897:Lib/core_pins.h **** 			} else if (pin == 31) {
+ 898:Lib/core_pins.h **** 				CORE_PIN31_PORTREG |= CORE_PIN31_BITMASK;
+ 899:Lib/core_pins.h **** 			} else if (pin == 32) {
+ 900:Lib/core_pins.h **** 				CORE_PIN32_PORTREG |= CORE_PIN32_BITMASK;
+ 901:Lib/core_pins.h **** 			} else if (pin == 33) {
+ 902:Lib/core_pins.h **** 				CORE_PIN33_PORTREG |= CORE_PIN33_BITMASK;
+ 903:Lib/core_pins.h **** 			} else if (pin == 34) {
+ 904:Lib/core_pins.h **** 				CORE_PIN34_PORTREG |= CORE_PIN34_BITMASK;
+ 905:Lib/core_pins.h **** 			} else if (pin == 35) {
+ 906:Lib/core_pins.h **** 				CORE_PIN35_PORTREG |= CORE_PIN35_BITMASK;
+ 907:Lib/core_pins.h **** 			} else if (pin == 36) {
+ 908:Lib/core_pins.h **** 				CORE_PIN36_PORTREG |= CORE_PIN36_BITMASK;
+ 909:Lib/core_pins.h **** 			} else if (pin == 37) {
+ 910:Lib/core_pins.h **** 				CORE_PIN37_PORTREG |= CORE_PIN37_BITMASK;
+ 911:Lib/core_pins.h **** 			} else if (pin == 38) {
+ 912:Lib/core_pins.h **** 				CORE_PIN38_PORTREG |= CORE_PIN38_BITMASK;
+ 913:Lib/core_pins.h **** 			} else if (pin == 39) {
+ 914:Lib/core_pins.h **** 				CORE_PIN39_PORTREG |= CORE_PIN39_BITMASK;
+ 915:Lib/core_pins.h **** 			} else if (pin == 40) {
+ 916:Lib/core_pins.h **** 				CORE_PIN40_PORTREG |= CORE_PIN40_BITMASK;
+ 917:Lib/core_pins.h **** 			} else if (pin == 41) {
+ 918:Lib/core_pins.h **** 				CORE_PIN41_PORTREG |= CORE_PIN41_BITMASK;
+ 919:Lib/core_pins.h **** 			} else if (pin == 42) {
+ 920:Lib/core_pins.h **** 				CORE_PIN42_PORTREG |= CORE_PIN42_BITMASK;
+ 921:Lib/core_pins.h **** 			} else if (pin == 43) {
+ 922:Lib/core_pins.h **** 				CORE_PIN43_PORTREG |= CORE_PIN43_BITMASK;
+ 923:Lib/core_pins.h **** 			} else if (pin == 44) {
+ 924:Lib/core_pins.h **** 				CORE_PIN44_PORTREG |= CORE_PIN44_BITMASK;
+ 925:Lib/core_pins.h **** 			} else if (pin == 45) {
+ 926:Lib/core_pins.h **** 				CORE_PIN45_PORTREG |= CORE_PIN45_BITMASK;
+ 927:Lib/core_pins.h **** 			}
+ 928:Lib/core_pins.h **** 			#endif
+ 929:Lib/core_pins.h **** 		} else {
+ 930:Lib/core_pins.h **** 			if (pin == 0) {
+ 931:Lib/core_pins.h **** 				CORE_PIN0_PORTREG &= ~CORE_PIN0_BITMASK;
+ 932:Lib/core_pins.h **** 			} else if (pin == 1) {
+ 933:Lib/core_pins.h **** 				CORE_PIN1_PORTREG &= ~CORE_PIN1_BITMASK;
+ 934:Lib/core_pins.h **** 			} else if (pin == 2) {
+ 935:Lib/core_pins.h **** 				CORE_PIN2_PORTREG &= ~CORE_PIN2_BITMASK;
+ 936:Lib/core_pins.h **** 			} else if (pin == 3) {
+ 937:Lib/core_pins.h **** 				CORE_PIN3_PORTREG &= ~CORE_PIN3_BITMASK;
+ 938:Lib/core_pins.h **** 			} else if (pin == 4) {
+ 939:Lib/core_pins.h **** 				CORE_PIN4_PORTREG &= ~CORE_PIN4_BITMASK;
+ 940:Lib/core_pins.h **** 			} else if (pin == 5) {
+ 941:Lib/core_pins.h **** 				CORE_PIN5_PORTREG &= ~CORE_PIN5_BITMASK;
+ 942:Lib/core_pins.h **** 			} else if (pin == 6) {
+ 943:Lib/core_pins.h **** 				CORE_PIN6_PORTREG &= ~CORE_PIN6_BITMASK;
+ 944:Lib/core_pins.h **** 			} else if (pin == 7) {
+ 945:Lib/core_pins.h **** 				CORE_PIN7_PORTREG &= ~CORE_PIN7_BITMASK;
+ 946:Lib/core_pins.h **** 			} else if (pin == 8) {
+ 947:Lib/core_pins.h **** 				CORE_PIN8_PORTREG &= ~CORE_PIN8_BITMASK;
+ 948:Lib/core_pins.h **** 			} else if (pin == 9) {
+ 949:Lib/core_pins.h **** 				CORE_PIN9_PORTREG &= ~CORE_PIN9_BITMASK;
+ 950:Lib/core_pins.h **** 			} else if (pin == 10) {
+ 951:Lib/core_pins.h **** 				CORE_PIN10_PORTREG &= ~CORE_PIN10_BITMASK;
+ 952:Lib/core_pins.h **** 			} else if (pin == 11) {
+ 953:Lib/core_pins.h **** 				CORE_PIN11_PORTREG &= ~CORE_PIN11_BITMASK;
+ 954:Lib/core_pins.h **** 			} else if (pin == 12) {
+ 955:Lib/core_pins.h **** 				CORE_PIN12_PORTREG &= ~CORE_PIN12_BITMASK;
+ 956:Lib/core_pins.h **** 			} else if (pin == 13) {
+ 957:Lib/core_pins.h **** 				CORE_PIN13_PORTREG &= ~CORE_PIN13_BITMASK;
+ 958:Lib/core_pins.h **** 			} else if (pin == 14) {
+ 959:Lib/core_pins.h **** 				CORE_PIN14_PORTREG &= ~CORE_PIN14_BITMASK;
+ 960:Lib/core_pins.h **** 			} else if (pin == 15) {
+ 961:Lib/core_pins.h **** 				CORE_PIN15_PORTREG &= ~CORE_PIN15_BITMASK;
+ 962:Lib/core_pins.h **** 			} else if (pin == 16) {
+ 963:Lib/core_pins.h **** 				CORE_PIN16_PORTREG &= ~CORE_PIN16_BITMASK;
+ 964:Lib/core_pins.h **** 			} else if (pin == 17) {
+ 965:Lib/core_pins.h **** 				CORE_PIN17_PORTREG &= ~CORE_PIN17_BITMASK;
+ 966:Lib/core_pins.h **** 			} else if (pin == 18) {
+ 967:Lib/core_pins.h **** 				CORE_PIN18_PORTREG &= ~CORE_PIN18_BITMASK;
+ 968:Lib/core_pins.h **** 			} else if (pin == 19) {
+ 969:Lib/core_pins.h **** 				CORE_PIN19_PORTREG &= ~CORE_PIN19_BITMASK;
+ 970:Lib/core_pins.h **** 			} else if (pin == 20) {
+ 971:Lib/core_pins.h **** 				CORE_PIN20_PORTREG &= ~CORE_PIN20_BITMASK;
+ 972:Lib/core_pins.h **** 			}
+ 973:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 21
+ 974:Lib/core_pins.h **** 			  else if (pin == 21) {
+ 975:Lib/core_pins.h **** 				CORE_PIN21_PORTREG &= ~CORE_PIN21_BITMASK;
+ 976:Lib/core_pins.h **** 			} else if (pin == 22) {
+ 977:Lib/core_pins.h **** 				CORE_PIN22_PORTREG &= ~CORE_PIN22_BITMASK;
+ 978:Lib/core_pins.h **** 			} else if (pin == 23) {
+ 979:Lib/core_pins.h **** 				CORE_PIN23_PORTREG &= ~CORE_PIN23_BITMASK;
+ 980:Lib/core_pins.h **** 			} else if (pin == 24) {
+ 981:Lib/core_pins.h **** 				CORE_PIN24_PORTREG &= ~CORE_PIN24_BITMASK;
+ 982:Lib/core_pins.h **** 			}
+ 983:Lib/core_pins.h **** 			#endif
+ 984:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 25
+ 985:Lib/core_pins.h **** 			  else if (pin == 25) {
+ 986:Lib/core_pins.h **** 				CORE_PIN25_PORTREG &= ~CORE_PIN25_BITMASK;
+ 987:Lib/core_pins.h **** 			} else if (pin == 26) {
+ 988:Lib/core_pins.h **** 				CORE_PIN26_PORTREG &= ~CORE_PIN26_BITMASK;
+ 989:Lib/core_pins.h **** 			} else if (pin == 27) {
+ 990:Lib/core_pins.h **** 				CORE_PIN27_PORTREG &= ~CORE_PIN27_BITMASK;
+ 991:Lib/core_pins.h **** 			} else if (pin == 28) {
+ 992:Lib/core_pins.h **** 				CORE_PIN28_PORTREG &= ~CORE_PIN28_BITMASK;
+ 993:Lib/core_pins.h **** 			} else if (pin == 29) {
+ 994:Lib/core_pins.h **** 				CORE_PIN29_PORTREG &= ~CORE_PIN29_BITMASK;
+ 995:Lib/core_pins.h **** 			} else if (pin == 30) {
+ 996:Lib/core_pins.h **** 				CORE_PIN30_PORTREG &= ~CORE_PIN30_BITMASK;
+ 997:Lib/core_pins.h **** 			} else if (pin == 31) {
+ 998:Lib/core_pins.h **** 				CORE_PIN31_PORTREG &= ~CORE_PIN31_BITMASK;
+ 999:Lib/core_pins.h **** 			} else if (pin == 32) {
+1000:Lib/core_pins.h **** 				CORE_PIN32_PORTREG &= ~CORE_PIN32_BITMASK;
+1001:Lib/core_pins.h **** 			} else if (pin == 33) {
+1002:Lib/core_pins.h **** 				CORE_PIN33_PORTREG &= ~CORE_PIN33_BITMASK;
+1003:Lib/core_pins.h **** 			} else if (pin == 34) {
+1004:Lib/core_pins.h **** 				CORE_PIN34_PORTREG &= ~CORE_PIN34_BITMASK;
+1005:Lib/core_pins.h **** 			} else if (pin == 35) {
+1006:Lib/core_pins.h **** 				CORE_PIN35_PORTREG &= ~CORE_PIN35_BITMASK;
+1007:Lib/core_pins.h **** 			} else if (pin == 36) {
+1008:Lib/core_pins.h **** 				CORE_PIN36_PORTREG &= ~CORE_PIN36_BITMASK;
+1009:Lib/core_pins.h **** 			} else if (pin == 37) {
+1010:Lib/core_pins.h **** 				CORE_PIN37_PORTREG &= ~CORE_PIN37_BITMASK;
+1011:Lib/core_pins.h **** 			} else if (pin == 38) {
+1012:Lib/core_pins.h **** 				CORE_PIN38_PORTREG &= ~CORE_PIN38_BITMASK;
+1013:Lib/core_pins.h **** 			} else if (pin == 39) {
+1014:Lib/core_pins.h **** 				CORE_PIN39_PORTREG &= ~CORE_PIN39_BITMASK;
+1015:Lib/core_pins.h **** 			} else if (pin == 40) {
+1016:Lib/core_pins.h **** 				CORE_PIN40_PORTREG &= ~CORE_PIN40_BITMASK;
+1017:Lib/core_pins.h **** 			} else if (pin == 41) {
+1018:Lib/core_pins.h **** 				CORE_PIN41_PORTREG &= ~CORE_PIN41_BITMASK;
+1019:Lib/core_pins.h **** 			} else if (pin == 42) {
+1020:Lib/core_pins.h **** 				CORE_PIN42_PORTREG &= ~CORE_PIN42_BITMASK;
+1021:Lib/core_pins.h **** 			} else if (pin == 43) {
+1022:Lib/core_pins.h **** 				CORE_PIN43_PORTREG &= ~CORE_PIN43_BITMASK;
+1023:Lib/core_pins.h **** 			} else if (pin == 44) {
+1024:Lib/core_pins.h **** 				CORE_PIN44_PORTREG &= ~CORE_PIN44_BITMASK;
+1025:Lib/core_pins.h **** 			} else if (pin == 45) {
+1026:Lib/core_pins.h **** 				CORE_PIN45_PORTREG &= ~CORE_PIN45_BITMASK;
+1027:Lib/core_pins.h **** 			}
+1028:Lib/core_pins.h **** 			#endif
+1029:Lib/core_pins.h **** 		}
+1030:Lib/core_pins.h **** 		if (pin == CORE_OC0B_PIN) {
+1031:Lib/core_pins.h **** 			_SFR_BYTE(TCCR0A) &= ~(1<<COM0B1);
+1032:Lib/core_pins.h **** 		} else if (pin == CORE_OC1A_PIN) {
+1033:Lib/core_pins.h **** 			TCCR1A &= ~(1<<COM1A1);
+1034:Lib/core_pins.h **** 		} else if (pin == CORE_OC1B_PIN) {
+1035:Lib/core_pins.h **** 			TCCR1A &= ~(1<<COM1B1);
+1036:Lib/core_pins.h **** 		} else if (pin == CORE_OC1C_PIN) {
+1037:Lib/core_pins.h **** 			TCCR1A &= ~(1<<COM1C1);
+1038:Lib/core_pins.h **** 		}
+1039:Lib/core_pins.h **** 		#if defined(__AVR_ATmega32U4__)
+1040:Lib/core_pins.h **** 		  else if (pin == CORE_OC3A_PIN) {
+1041:Lib/core_pins.h **** 			TCCR3A &= ~(1<<COM3A1);
+1042:Lib/core_pins.h **** 		} else if (pin == CORE_OC4A_PIN) {
+1043:Lib/core_pins.h **** 			TCCR4A &= ~(1<<COM4A1);
+1044:Lib/core_pins.h **** 		} else if (pin == CORE_OC4D_PIN) {
+1045:Lib/core_pins.h **** 			TCCR4C &= ~(1<<COM4D1);
+1046:Lib/core_pins.h **** 		}
+1047:Lib/core_pins.h **** 		#endif
+1048:Lib/core_pins.h **** 		#if defined(__AVR_AT90USB646__) || defined(__AVR_AT90USB1286__)
+1049:Lib/core_pins.h **** 		  else if (pin == CORE_OC2A_PIN) {
+1050:Lib/core_pins.h **** 			TCCR2A &= ~(1<<COM2A1);
+1051:Lib/core_pins.h **** 		} else if (pin == CORE_OC2B_PIN) {
+1052:Lib/core_pins.h **** 			TCCR2A &= ~(1<<COM2B1);
+1053:Lib/core_pins.h **** 		} else if (pin == CORE_OC3A_PIN) {
+1054:Lib/core_pins.h **** 			TCCR3A &= ~(1<<COM3A1);
+1055:Lib/core_pins.h **** 		} else if (pin == CORE_OC3B_PIN) {
+1056:Lib/core_pins.h **** 			TCCR3A &= ~(1<<COM3B1);
+1057:Lib/core_pins.h **** 		} else if (pin == CORE_OC3C_PIN) {
+1058:Lib/core_pins.h **** 			TCCR3A &= ~(1<<COM3C1);
+1059:Lib/core_pins.h **** 		}
+1060:Lib/core_pins.h **** 		#endif
+1061:Lib/core_pins.h **** 	} else {
+1062:Lib/core_pins.h **** 		if (__builtin_constant_p(val)) {
+1063:Lib/core_pins.h **** 			if (val) {
+1064:Lib/core_pins.h **** 				uint16_t tmp = (pin);
+ 259               		.loc 3 1064 0
+ 260 00da F0E0      		ldi r31,0
+ 261               	.LVL31:
+1065:Lib/core_pins.h **** 				asm volatile(
+1066:Lib/core_pins.h **** 					#if defined(DIGITAL_WRITE_EXPENSIVE_INLINE_OPTIMIZATION)
+1067:Lib/core_pins.h **** 					#if !defined(DIGITAL_WRITE_RISKY_OMIT_OVERFLOW_CHECK)
+1068:Lib/core_pins.h **** 					"cpi	r30, %1"					"\n\t"
+1069:Lib/core_pins.h **** 					"brsh	L%=end1"					"\n\t"
+1070:Lib/core_pins.h **** 					#endif
+1071:Lib/core_pins.h **** 					"lsl	r30"						"\n\t"
+1072:Lib/core_pins.h **** 					//"clr	r31"						"\n\t"
+1073:Lib/core_pins.h **** 					"subi	r30, lo8(-(pm(_digitalWrite_HIGH_TABLE)))"	"\n\t"
+1074:Lib/core_pins.h **** 					"sbci	r31, hi8(-(pm(_digitalWrite_HIGH_TABLE)))"	"\n\t"
+1075:Lib/core_pins.h **** 					"icall"							"\n\t"
+1076:Lib/core_pins.h **** 					"L%=end1:"						"\n"
+1077:Lib/core_pins.h **** 					#else
+1078:Lib/core_pins.h **** 					"call _digitalWrite_HIGH"
+1079:Lib/core_pins.h **** 					#endif
+1080:Lib/core_pins.h **** 					: "+z" (tmp)
+1081:Lib/core_pins.h **** 					: "I" (CORE_NUM_TOTAL_PINS)
+1082:Lib/core_pins.h **** 				);
+ 262               		.loc 3 1082 0
+ 263               	/* #APP */
+ 264               	 ;  1082 "Lib/core_pins.h" 1
+ 265 00dc 0E94 0000 		call _digitalWrite_HIGH
+ 266               	 ;  0 "" 2
+ 267               	.LVL32:
+ 268               	/* #NOAPP */
+ 269 00e0 00C0      		rjmp .L22
+ 270               	.LBE75:
+ 271               	.LBE74:
+ 272               	.LBE73:
+ 273               	.LBE72:
+ 274               		.cfi_endproc
+ 275               	.LFE69:
+ 277               	.global	_ZN14HardwareSerial6_beginEjh
+ 279               	_ZN14HardwareSerial6_beginEjh:
+ 280               	.LFB61:
+  45:Lib/HardwareSerial.cpp **** {
+ 281               		.loc 1 45 0
+ 282               		.cfi_startproc
+ 283               	.LVL33:
+ 284 00e2 0F93      		push r16
+ 285               	.LCFI0:
+ 286               		.cfi_def_cfa_offset 3
+ 287               		.cfi_offset 16, -2
+ 288 00e4 1F93      		push r17
+ 289               	.LCFI1:
+ 290               		.cfi_def_cfa_offset 4
+ 291               		.cfi_offset 17, -3
+ 292 00e6 CF93      		push r28
+ 293               	.LCFI2:
+ 294               		.cfi_def_cfa_offset 5
+ 295               		.cfi_offset 28, -4
+ 296 00e8 DF93      		push r29
+ 297               	.LCFI3:
+ 298               		.cfi_def_cfa_offset 6
+ 299               		.cfi_offset 29, -5
+ 300 00ea 1F92      		push __zero_reg__
+ 301               	.LCFI4:
+ 302               		.cfi_def_cfa_offset 7
+ 303 00ec CDB7      		in r28,__SP_L__
+ 304 00ee DEB7      		in r29,__SP_H__
+ 305               	.LCFI5:
+ 306               		.cfi_def_cfa_register 28
+ 307               	/* prologue: function */
+ 308               	/* frame size = 1 */
+ 309               	/* stack size = 5 */
+ 310               	.L__stack_usage = 5
+ 311 00f0 8B01      		movw r16,r22
+  46:Lib/HardwareSerial.cpp **** 	tx_enable_pin = txen_pin;
+ 312               		.loc 1 46 0
+ 313 00f2 4093 0000 		sts _ZL13tx_enable_pin,r20
+  47:Lib/HardwareSerial.cpp **** 	if (txen_pin < 255) {
+ 314               		.loc 1 47 0
+ 315 00f6 4F3F      		cpi r20,lo8(-1)
+ 316 00f8 01F0      		breq .L33
+ 317               	.LVL34:
+ 318               	.LBB76:
+ 319               	.LBB77:
+1083:Lib/core_pins.h **** 			} else {
+1084:Lib/core_pins.h **** 				uint16_t tmp = (pin);
+1085:Lib/core_pins.h **** 				asm volatile(
+1086:Lib/core_pins.h **** 					#if defined(DIGITAL_WRITE_EXPENSIVE_INLINE_OPTIMIZATION)
+1087:Lib/core_pins.h **** 					#if !defined(DIGITAL_WRITE_RISKY_OMIT_OVERFLOW_CHECK)
+1088:Lib/core_pins.h **** 					"cpi	r30, %1"					"\n\t"
+1089:Lib/core_pins.h **** 					"brsh	L%=end2"					"\n\t"
+1090:Lib/core_pins.h **** 					#endif
+1091:Lib/core_pins.h **** 					"lsl	r30"						"\n\t"
+1092:Lib/core_pins.h **** 					//"clr	r31"						"\n\t"
+1093:Lib/core_pins.h **** 					"subi	r30, lo8(-(pm(_digitalWrite_LOW_TABLE)))"	"\n\t"
+1094:Lib/core_pins.h **** 					"sbci	r31, hi8(-(pm(_digitalWrite_LOW_TABLE)))"	"\n\t"
+1095:Lib/core_pins.h **** 					"icall"							"\n\t"
+1096:Lib/core_pins.h **** 					"L%=end2:"						"\n"
+1097:Lib/core_pins.h **** 					#else
+1098:Lib/core_pins.h **** 					"call _digitalWrite_LOW"
+1099:Lib/core_pins.h **** 					#endif
+1100:Lib/core_pins.h **** 					: "+z" (tmp)
+1101:Lib/core_pins.h **** 					: "I" (CORE_NUM_TOTAL_PINS)
+1102:Lib/core_pins.h **** 				);
+1103:Lib/core_pins.h **** 			}
+1104:Lib/core_pins.h **** 		} else {
+1105:Lib/core_pins.h **** 			uint16_t tmp1 = (pin);
+1106:Lib/core_pins.h **** 			uint8_t tmp2 = (val);
+1107:Lib/core_pins.h **** 			asm volatile(
+1108:Lib/core_pins.h **** 				#if defined(DIGITAL_WRITE_EXPENSIVE_INLINE_OPTIMIZATION)
+1109:Lib/core_pins.h **** 				#if !defined(DIGITAL_WRITE_RISKY_OMIT_OVERFLOW_CHECK)
+1110:Lib/core_pins.h **** 				"cpi	%0, %2"						"\n\t"
+1111:Lib/core_pins.h **** 				"brsh	L%=end3"					"\n\t"
+1112:Lib/core_pins.h **** 				#endif
+1113:Lib/core_pins.h **** 				"lsl	r30"						"\n\t"
+1114:Lib/core_pins.h **** 				//"clr	r31"						"\n\t"
+1115:Lib/core_pins.h **** 				"tst	%1"						"\n\t"
+1116:Lib/core_pins.h **** 				"breq	L%=low"						"\n\t"
+1117:Lib/core_pins.h **** 				"subi	r30, lo8(-(pm(_digitalWrite_HIGH_TABLE)))"	"\n\t"
+1118:Lib/core_pins.h **** 				"sbci	r31, hi8(-(pm(_digitalWrite_HIGH_TABLE)))"	"\n\t"
+1119:Lib/core_pins.h **** 				"icall"							"\n\t"
+1120:Lib/core_pins.h **** 				"rjmp	L%=end3"					"\n\t"
+1121:Lib/core_pins.h **** 				"L%=low:"						"\n\t"
+1122:Lib/core_pins.h **** 				"subi	r30, lo8(-(pm(_digitalWrite_LOW_TABLE)))"	"\n\t"
+1123:Lib/core_pins.h **** 				"sbci	r31, hi8(-(pm(_digitalWrite_LOW_TABLE)))"	"\n\t"
+1124:Lib/core_pins.h **** 				"icall"							"\n\t"
+1125:Lib/core_pins.h **** 				"L%=end3:"						"\n\t"
+1126:Lib/core_pins.h **** 				: "+z" (tmp1)
+1127:Lib/core_pins.h **** 				: "d" (tmp2), "I" (CORE_NUM_TOTAL_PINS)
+1128:Lib/core_pins.h **** 				#else
+1129:Lib/core_pins.h **** 				"mov __tmp_reg__, %1"  "\n\t"
+1130:Lib/core_pins.h **** 				"call _digitalWrite"
+1131:Lib/core_pins.h **** 				: "+z" (tmp1)
+1132:Lib/core_pins.h **** 				: "r" (tmp2)
+1133:Lib/core_pins.h **** 				#endif
+1134:Lib/core_pins.h **** 			);
+1135:Lib/core_pins.h **** 		}
+1136:Lib/core_pins.h **** 	}
+1137:Lib/core_pins.h **** }
+1138:Lib/core_pins.h **** 
+1139:Lib/core_pins.h **** extern void _digitalRead(void) __attribute__((noinline));
+1140:Lib/core_pins.h **** 
+1141:Lib/core_pins.h **** static inline uint8_t digitalRead(uint8_t) __attribute__((always_inline, unused));
+1142:Lib/core_pins.h **** static inline uint8_t digitalRead(uint8_t pin)
+1143:Lib/core_pins.h **** {
+1144:Lib/core_pins.h **** 	if (__builtin_constant_p(pin)) {
+1145:Lib/core_pins.h **** 		if (pin == 0) {
+1146:Lib/core_pins.h **** 			return (CORE_PIN0_PINREG & CORE_PIN0_BITMASK) ? 1 : 0;
+1147:Lib/core_pins.h **** 		} else if (pin == 1) {
+1148:Lib/core_pins.h **** 			return (CORE_PIN1_PINREG & CORE_PIN1_BITMASK) ? 1 : 0;
+1149:Lib/core_pins.h **** 		} else if (pin == 2) {
+1150:Lib/core_pins.h **** 			return (CORE_PIN2_PINREG & CORE_PIN2_BITMASK) ? 1 : 0;
+1151:Lib/core_pins.h **** 		} else if (pin == 3) {
+1152:Lib/core_pins.h **** 			return (CORE_PIN3_PINREG & CORE_PIN3_BITMASK) ? 1 : 0;
+1153:Lib/core_pins.h **** 		} else if (pin == 4) {
+1154:Lib/core_pins.h **** 			return (CORE_PIN4_PINREG & CORE_PIN4_BITMASK) ? 1 : 0;
+1155:Lib/core_pins.h **** 		} else if (pin == 5) {
+1156:Lib/core_pins.h **** 			return (CORE_PIN5_PINREG & CORE_PIN5_BITMASK) ? 1 : 0;
+1157:Lib/core_pins.h **** 		} else if (pin == 6) {
+1158:Lib/core_pins.h **** 			return (CORE_PIN6_PINREG & CORE_PIN6_BITMASK) ? 1 : 0;
+1159:Lib/core_pins.h **** 		} else if (pin == 7) {
+1160:Lib/core_pins.h **** 			return (CORE_PIN7_PINREG & CORE_PIN7_BITMASK) ? 1 : 0;
+1161:Lib/core_pins.h **** 		} else if (pin == 8) {
+1162:Lib/core_pins.h **** 			return (CORE_PIN8_PINREG & CORE_PIN8_BITMASK) ? 1 : 0;
+1163:Lib/core_pins.h **** 		} else if (pin == 9) {
+1164:Lib/core_pins.h **** 			return (CORE_PIN9_PINREG & CORE_PIN9_BITMASK) ? 1 : 0;
+1165:Lib/core_pins.h **** 		} else if (pin == 10) {
+1166:Lib/core_pins.h **** 			return (CORE_PIN10_PINREG & CORE_PIN10_BITMASK) ? 1 : 0;
+1167:Lib/core_pins.h **** 		} else if (pin == 11) {
+1168:Lib/core_pins.h **** 			return (CORE_PIN11_PINREG & CORE_PIN11_BITMASK) ? 1 : 0;
+1169:Lib/core_pins.h **** 		} else if (pin == 12) {
+1170:Lib/core_pins.h **** 			return (CORE_PIN12_PINREG & CORE_PIN12_BITMASK) ? 1 : 0;
+1171:Lib/core_pins.h **** 		} else if (pin == 13) {
+1172:Lib/core_pins.h **** 			return (CORE_PIN13_PINREG & CORE_PIN13_BITMASK) ? 1 : 0;
+1173:Lib/core_pins.h **** 		} else if (pin == 14) {
+1174:Lib/core_pins.h **** 			return (CORE_PIN14_PINREG & CORE_PIN14_BITMASK) ? 1 : 0;
+1175:Lib/core_pins.h **** 		} else if (pin == 15) {
+1176:Lib/core_pins.h **** 			return (CORE_PIN15_PINREG & CORE_PIN15_BITMASK) ? 1 : 0;
+1177:Lib/core_pins.h **** 		} else if (pin == 16) {
+1178:Lib/core_pins.h **** 			return (CORE_PIN16_PINREG & CORE_PIN16_BITMASK) ? 1 : 0;
+1179:Lib/core_pins.h **** 		} else if (pin == 17) {
+1180:Lib/core_pins.h **** 			return (CORE_PIN17_PINREG & CORE_PIN17_BITMASK) ? 1 : 0;
+1181:Lib/core_pins.h **** 		} else if (pin == 18) {
+1182:Lib/core_pins.h **** 			return (CORE_PIN18_PINREG & CORE_PIN18_BITMASK) ? 1 : 0;
+1183:Lib/core_pins.h **** 		} else if (pin == 19) {
+1184:Lib/core_pins.h **** 			return (CORE_PIN19_PINREG & CORE_PIN19_BITMASK) ? 1 : 0;
+1185:Lib/core_pins.h **** 		} else if (pin == 20) {
+1186:Lib/core_pins.h **** 			return (CORE_PIN20_PINREG & CORE_PIN20_BITMASK) ? 1 : 0;
+1187:Lib/core_pins.h **** 		}
+1188:Lib/core_pins.h **** 		#if CORE_NUM_TOTAL_PINS > 21
+1189:Lib/core_pins.h **** 		  else if (pin == 21) {
+1190:Lib/core_pins.h **** 			return (CORE_PIN21_PINREG & CORE_PIN21_BITMASK) ? 1 : 0;
+1191:Lib/core_pins.h **** 		} else if (pin == 22) {
+1192:Lib/core_pins.h **** 			return (CORE_PIN22_PINREG & CORE_PIN22_BITMASK) ? 1 : 0;
+1193:Lib/core_pins.h **** 		} else if (pin == 23) {
+1194:Lib/core_pins.h **** 			return (CORE_PIN23_PINREG & CORE_PIN23_BITMASK) ? 1 : 0;
+1195:Lib/core_pins.h **** 		} else if (pin == 24) {
+1196:Lib/core_pins.h **** 			return (CORE_PIN24_PINREG & CORE_PIN24_BITMASK) ? 1 : 0;
+1197:Lib/core_pins.h **** 		}
+1198:Lib/core_pins.h **** 		#endif
+1199:Lib/core_pins.h **** 		#if CORE_NUM_TOTAL_PINS > 25
+1200:Lib/core_pins.h **** 		  else if (pin == 25) {
+1201:Lib/core_pins.h **** 			return (CORE_PIN25_PINREG & CORE_PIN25_BITMASK) ? 1 : 0;
+1202:Lib/core_pins.h **** 		} else if (pin == 26) {
+1203:Lib/core_pins.h **** 			return (CORE_PIN26_PINREG & CORE_PIN26_BITMASK) ? 1 : 0;
+1204:Lib/core_pins.h **** 		} else if (pin == 27) {
+1205:Lib/core_pins.h **** 			return (CORE_PIN27_PINREG & CORE_PIN27_BITMASK) ? 1 : 0;
+1206:Lib/core_pins.h **** 		} else if (pin == 28) {
+1207:Lib/core_pins.h **** 			return (CORE_PIN28_PINREG & CORE_PIN28_BITMASK) ? 1 : 0;
+1208:Lib/core_pins.h **** 		} else if (pin == 29) {
+1209:Lib/core_pins.h **** 			return (CORE_PIN29_PINREG & CORE_PIN29_BITMASK) ? 1 : 0;
+1210:Lib/core_pins.h **** 		} else if (pin == 30) {
+1211:Lib/core_pins.h **** 			return (CORE_PIN30_PINREG & CORE_PIN30_BITMASK) ? 1 : 0;
+1212:Lib/core_pins.h **** 		} else if (pin == 31) {
+1213:Lib/core_pins.h **** 			return (CORE_PIN31_PINREG & CORE_PIN31_BITMASK) ? 1 : 0;
+1214:Lib/core_pins.h **** 		} else if (pin == 32) {
+1215:Lib/core_pins.h **** 			return (CORE_PIN32_PINREG & CORE_PIN32_BITMASK) ? 1 : 0;
+1216:Lib/core_pins.h **** 		} else if (pin == 33) {
+1217:Lib/core_pins.h **** 			return (CORE_PIN33_PINREG & CORE_PIN33_BITMASK) ? 1 : 0;
+1218:Lib/core_pins.h **** 		} else if (pin == 34) {
+1219:Lib/core_pins.h **** 			return (CORE_PIN34_PINREG & CORE_PIN34_BITMASK) ? 1 : 0;
+1220:Lib/core_pins.h **** 		} else if (pin == 35) {
+1221:Lib/core_pins.h **** 			return (CORE_PIN35_PINREG & CORE_PIN35_BITMASK) ? 1 : 0;
+1222:Lib/core_pins.h **** 		} else if (pin == 36) {
+1223:Lib/core_pins.h **** 			return (CORE_PIN36_PINREG & CORE_PIN36_BITMASK) ? 1 : 0;
+1224:Lib/core_pins.h **** 		} else if (pin == 37) {
+1225:Lib/core_pins.h **** 			return (CORE_PIN37_PINREG & CORE_PIN37_BITMASK) ? 1 : 0;
+1226:Lib/core_pins.h **** 		} else if (pin == 38) {
+1227:Lib/core_pins.h **** 			return (CORE_PIN38_PINREG & CORE_PIN38_BITMASK) ? 1 : 0;
+1228:Lib/core_pins.h **** 		} else if (pin == 39) {
+1229:Lib/core_pins.h **** 			return (CORE_PIN39_PINREG & CORE_PIN39_BITMASK) ? 1 : 0;
+1230:Lib/core_pins.h **** 		} else if (pin == 40) {
+1231:Lib/core_pins.h **** 			return (CORE_PIN40_PINREG & CORE_PIN40_BITMASK) ? 1 : 0;
+1232:Lib/core_pins.h **** 		} else if (pin == 41) {
+1233:Lib/core_pins.h **** 			return (CORE_PIN41_PINREG & CORE_PIN41_BITMASK) ? 1 : 0;
+1234:Lib/core_pins.h **** 		} else if (pin == 42) {
+1235:Lib/core_pins.h **** 			return (CORE_PIN42_PINREG & CORE_PIN42_BITMASK) ? 1 : 0;
+1236:Lib/core_pins.h **** 		} else if (pin == 43) {
+1237:Lib/core_pins.h **** 			return (CORE_PIN43_PINREG & CORE_PIN43_BITMASK) ? 1 : 0;
+1238:Lib/core_pins.h **** 		} else if (pin == 44) {
+1239:Lib/core_pins.h **** 			return (CORE_PIN44_PINREG & CORE_PIN44_BITMASK) ? 1 : 0;
+1240:Lib/core_pins.h **** 		} else if (pin == 45) {
+1241:Lib/core_pins.h **** 			return (CORE_PIN45_PINREG & CORE_PIN45_BITMASK) ? 1 : 0;
+1242:Lib/core_pins.h **** 		}
+1243:Lib/core_pins.h **** 		#endif
+1244:Lib/core_pins.h **** 		  else {
+1245:Lib/core_pins.h **** 			return 0;
+1246:Lib/core_pins.h **** 		}
+1247:Lib/core_pins.h **** 	} else {
+1248:Lib/core_pins.h **** 		uint16_t tmp = (pin);
+1249:Lib/core_pins.h **** 		asm volatile(
+1250:Lib/core_pins.h **** 			"call _digitalRead"
+1251:Lib/core_pins.h **** 			: "+z" (tmp)
+1252:Lib/core_pins.h **** 			:);
+1253:Lib/core_pins.h **** 		return (uint8_t)tmp;
+1254:Lib/core_pins.h **** 	}
+1255:Lib/core_pins.h **** }
+1256:Lib/core_pins.h **** 
+1257:Lib/core_pins.h **** extern void _pinMode(uint8_t pin, uint8_t mode) __attribute__((noinline));
+1258:Lib/core_pins.h **** extern void _pinMode_output(uint8_t pin) __attribute__((noinline));
+1259:Lib/core_pins.h **** extern void _pinMode_input(uint8_t pin) __attribute__((noinline));
+1260:Lib/core_pins.h **** extern void _pinMode_input_pullup(uint8_t pin) __attribute__((noinline));
+1261:Lib/core_pins.h **** 
+1262:Lib/core_pins.h **** static inline void pinMode(uint8_t, uint8_t) __attribute__((always_inline, unused));
+1263:Lib/core_pins.h **** static inline void pinMode(uint8_t pin, uint8_t mode)
+1264:Lib/core_pins.h **** {
+1265:Lib/core_pins.h **** 	if (__builtin_constant_p(pin) && __builtin_constant_p(mode)) {
+1266:Lib/core_pins.h **** 		if (mode == OUTPUT) {
+1267:Lib/core_pins.h **** 			if (pin == 0) {
+1268:Lib/core_pins.h **** 				CORE_PIN0_DDRREG |= CORE_PIN0_BITMASK;
+1269:Lib/core_pins.h **** 			} else if (pin == 1) {
+1270:Lib/core_pins.h **** 				CORE_PIN1_DDRREG |= CORE_PIN1_BITMASK;
+1271:Lib/core_pins.h **** 			} else if (pin == 2) {
+1272:Lib/core_pins.h **** 				CORE_PIN2_DDRREG |= CORE_PIN2_BITMASK;
+1273:Lib/core_pins.h **** 			} else if (pin == 3) {
+1274:Lib/core_pins.h **** 				CORE_PIN3_DDRREG |= CORE_PIN3_BITMASK;
+1275:Lib/core_pins.h **** 			} else if (pin == 4) {
+1276:Lib/core_pins.h **** 				CORE_PIN4_DDRREG |= CORE_PIN4_BITMASK;
+1277:Lib/core_pins.h **** 			} else if (pin == 5) {
+1278:Lib/core_pins.h **** 				CORE_PIN5_DDRREG |= CORE_PIN5_BITMASK;
+1279:Lib/core_pins.h **** 			} else if (pin == 6) {
+1280:Lib/core_pins.h **** 				CORE_PIN6_DDRREG |= CORE_PIN6_BITMASK;
+1281:Lib/core_pins.h **** 			} else if (pin == 7) {
+1282:Lib/core_pins.h **** 				CORE_PIN7_DDRREG |= CORE_PIN7_BITMASK;
+1283:Lib/core_pins.h **** 			} else if (pin == 8) {
+1284:Lib/core_pins.h **** 				CORE_PIN8_DDRREG |= CORE_PIN8_BITMASK;
+1285:Lib/core_pins.h **** 			} else if (pin == 9) {
+1286:Lib/core_pins.h **** 				CORE_PIN9_DDRREG |= CORE_PIN9_BITMASK;
+1287:Lib/core_pins.h **** 			} else if (pin == 10) {
+1288:Lib/core_pins.h **** 				CORE_PIN10_DDRREG |= CORE_PIN10_BITMASK;
+1289:Lib/core_pins.h **** 			} else if (pin == 11) {
+1290:Lib/core_pins.h **** 				CORE_PIN11_DDRREG |= CORE_PIN11_BITMASK;
+1291:Lib/core_pins.h **** 			} else if (pin == 12) {
+1292:Lib/core_pins.h **** 				CORE_PIN12_DDRREG |= CORE_PIN12_BITMASK;
+1293:Lib/core_pins.h **** 			} else if (pin == 13) {
+1294:Lib/core_pins.h **** 				CORE_PIN13_DDRREG |= CORE_PIN13_BITMASK;
+1295:Lib/core_pins.h **** 			} else if (pin == 14) {
+1296:Lib/core_pins.h **** 				CORE_PIN14_DDRREG |= CORE_PIN14_BITMASK;
+1297:Lib/core_pins.h **** 			} else if (pin == 15) {
+1298:Lib/core_pins.h **** 				CORE_PIN15_DDRREG |= CORE_PIN15_BITMASK;
+1299:Lib/core_pins.h **** 			} else if (pin == 16) {
+1300:Lib/core_pins.h **** 				CORE_PIN16_DDRREG |= CORE_PIN16_BITMASK;
+1301:Lib/core_pins.h **** 			} else if (pin == 17) {
+1302:Lib/core_pins.h **** 				CORE_PIN17_DDRREG |= CORE_PIN17_BITMASK;
+1303:Lib/core_pins.h **** 			} else if (pin == 18) {
+1304:Lib/core_pins.h **** 				CORE_PIN18_DDRREG |= CORE_PIN18_BITMASK;
+1305:Lib/core_pins.h **** 			} else if (pin == 19) {
+1306:Lib/core_pins.h **** 				CORE_PIN19_DDRREG |= CORE_PIN19_BITMASK;
+1307:Lib/core_pins.h **** 			} else if (pin == 20) {
+1308:Lib/core_pins.h **** 				CORE_PIN20_DDRREG |= CORE_PIN20_BITMASK;
+1309:Lib/core_pins.h **** 			}
+1310:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 21
+1311:Lib/core_pins.h **** 			  else if (pin == 21) {
+1312:Lib/core_pins.h **** 				CORE_PIN21_DDRREG |= CORE_PIN21_BITMASK;
+1313:Lib/core_pins.h **** 			} else if (pin == 22) {
+1314:Lib/core_pins.h **** 				CORE_PIN22_DDRREG |= CORE_PIN22_BITMASK;
+1315:Lib/core_pins.h **** 			} else if (pin == 23) {
+1316:Lib/core_pins.h **** 				CORE_PIN23_DDRREG |= CORE_PIN23_BITMASK;
+1317:Lib/core_pins.h **** 			} else if (pin == 24) {
+1318:Lib/core_pins.h **** 				CORE_PIN24_DDRREG |= CORE_PIN24_BITMASK;
+1319:Lib/core_pins.h **** 			}
+1320:Lib/core_pins.h **** 			#endif
+1321:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 25
+1322:Lib/core_pins.h **** 			  else if (pin == 25) {
+1323:Lib/core_pins.h **** 				CORE_PIN25_DDRREG |= CORE_PIN25_BITMASK;
+1324:Lib/core_pins.h **** 			} else if (pin == 26) {
+1325:Lib/core_pins.h **** 				CORE_PIN26_DDRREG |= CORE_PIN26_BITMASK;
+1326:Lib/core_pins.h **** 			} else if (pin == 27) {
+1327:Lib/core_pins.h **** 				CORE_PIN27_DDRREG |= CORE_PIN27_BITMASK;
+1328:Lib/core_pins.h **** 			} else if (pin == 28) {
+1329:Lib/core_pins.h **** 				CORE_PIN28_DDRREG |= CORE_PIN28_BITMASK;
+1330:Lib/core_pins.h **** 			} else if (pin == 29) {
+1331:Lib/core_pins.h **** 				CORE_PIN29_DDRREG |= CORE_PIN29_BITMASK;
+1332:Lib/core_pins.h **** 			} else if (pin == 30) {
+1333:Lib/core_pins.h **** 				CORE_PIN30_DDRREG |= CORE_PIN30_BITMASK;
+1334:Lib/core_pins.h **** 			} else if (pin == 31) {
+1335:Lib/core_pins.h **** 				CORE_PIN31_DDRREG |= CORE_PIN31_BITMASK;
+1336:Lib/core_pins.h **** 			} else if (pin == 32) {
+1337:Lib/core_pins.h **** 				CORE_PIN32_DDRREG |= CORE_PIN32_BITMASK;
+1338:Lib/core_pins.h **** 			} else if (pin == 33) {
+1339:Lib/core_pins.h **** 				CORE_PIN33_DDRREG |= CORE_PIN33_BITMASK;
+1340:Lib/core_pins.h **** 			} else if (pin == 34) {
+1341:Lib/core_pins.h **** 				CORE_PIN34_DDRREG |= CORE_PIN34_BITMASK;
+1342:Lib/core_pins.h **** 			} else if (pin == 35) {
+1343:Lib/core_pins.h **** 				CORE_PIN35_DDRREG |= CORE_PIN35_BITMASK;
+1344:Lib/core_pins.h **** 			} else if (pin == 36) {
+1345:Lib/core_pins.h **** 				CORE_PIN36_DDRREG |= CORE_PIN36_BITMASK;
+1346:Lib/core_pins.h **** 			} else if (pin == 37) {
+1347:Lib/core_pins.h **** 				CORE_PIN37_DDRREG |= CORE_PIN37_BITMASK;
+1348:Lib/core_pins.h **** 			} else if (pin == 38) {
+1349:Lib/core_pins.h **** 				CORE_PIN38_DDRREG |= CORE_PIN38_BITMASK;
+1350:Lib/core_pins.h **** 			} else if (pin == 39) {
+1351:Lib/core_pins.h **** 				CORE_PIN39_DDRREG |= CORE_PIN39_BITMASK;
+1352:Lib/core_pins.h **** 			} else if (pin == 40) {
+1353:Lib/core_pins.h **** 				CORE_PIN40_DDRREG |= CORE_PIN40_BITMASK;
+1354:Lib/core_pins.h **** 			} else if (pin == 41) {
+1355:Lib/core_pins.h **** 				CORE_PIN41_DDRREG |= CORE_PIN41_BITMASK;
+1356:Lib/core_pins.h **** 			} else if (pin == 42) {
+1357:Lib/core_pins.h **** 				CORE_PIN42_DDRREG |= CORE_PIN42_BITMASK;
+1358:Lib/core_pins.h **** 			} else if (pin == 43) {
+1359:Lib/core_pins.h **** 				CORE_PIN43_DDRREG |= CORE_PIN43_BITMASK;
+1360:Lib/core_pins.h **** 			} else if (pin == 44) {
+1361:Lib/core_pins.h **** 				CORE_PIN44_DDRREG |= CORE_PIN44_BITMASK;
+1362:Lib/core_pins.h **** 			} else if (pin == 45) {
+1363:Lib/core_pins.h **** 				CORE_PIN45_DDRREG |= CORE_PIN45_BITMASK;
+1364:Lib/core_pins.h **** 			}
+1365:Lib/core_pins.h **** 			#endif
+1366:Lib/core_pins.h **** 		} else if (mode == INPUT_PULLUP) {
+1367:Lib/core_pins.h **** 			if (pin == 0) {
+1368:Lib/core_pins.h **** 				CORE_PIN0_DDRREG  &= ~CORE_PIN0_BITMASK;
+1369:Lib/core_pins.h **** 				CORE_PIN0_PORTREG |=  CORE_PIN0_BITMASK;
+1370:Lib/core_pins.h **** 			} else if (pin == 1) {
+1371:Lib/core_pins.h **** 				CORE_PIN1_DDRREG  &= ~CORE_PIN1_BITMASK;
+1372:Lib/core_pins.h **** 				CORE_PIN1_PORTREG |=  CORE_PIN1_BITMASK;
+1373:Lib/core_pins.h **** 			} else if (pin == 2) {
+1374:Lib/core_pins.h **** 				CORE_PIN2_DDRREG  &= ~CORE_PIN2_BITMASK;
+1375:Lib/core_pins.h **** 				CORE_PIN2_PORTREG |=  CORE_PIN2_BITMASK;
+1376:Lib/core_pins.h **** 			} else if (pin == 3) {
+1377:Lib/core_pins.h **** 				CORE_PIN3_DDRREG  &= ~CORE_PIN3_BITMASK;
+1378:Lib/core_pins.h **** 				CORE_PIN3_PORTREG |=  CORE_PIN3_BITMASK;
+1379:Lib/core_pins.h **** 			} else if (pin == 4) {
+1380:Lib/core_pins.h **** 				CORE_PIN4_DDRREG  &= ~CORE_PIN4_BITMASK;
+1381:Lib/core_pins.h **** 				CORE_PIN4_PORTREG |=  CORE_PIN4_BITMASK;
+1382:Lib/core_pins.h **** 			} else if (pin == 5) {
+1383:Lib/core_pins.h **** 				CORE_PIN5_DDRREG  &= ~CORE_PIN5_BITMASK;
+1384:Lib/core_pins.h **** 				CORE_PIN5_PORTREG |=  CORE_PIN5_BITMASK;
+1385:Lib/core_pins.h **** 			} else if (pin == 6) {
+1386:Lib/core_pins.h **** 				CORE_PIN6_DDRREG  &= ~CORE_PIN6_BITMASK;
+1387:Lib/core_pins.h **** 				CORE_PIN6_PORTREG |=  CORE_PIN6_BITMASK;
+1388:Lib/core_pins.h **** 			} else if (pin == 7) {
+1389:Lib/core_pins.h **** 				CORE_PIN7_DDRREG  &= ~CORE_PIN7_BITMASK;
+1390:Lib/core_pins.h **** 				CORE_PIN7_PORTREG |=  CORE_PIN7_BITMASK;
+1391:Lib/core_pins.h **** 			} else if (pin == 8) {
+1392:Lib/core_pins.h **** 				CORE_PIN8_DDRREG  &= ~CORE_PIN8_BITMASK;
+1393:Lib/core_pins.h **** 				CORE_PIN8_PORTREG |=  CORE_PIN8_BITMASK;
+1394:Lib/core_pins.h **** 			} else if (pin == 9) {
+1395:Lib/core_pins.h **** 				CORE_PIN9_DDRREG  &= ~CORE_PIN9_BITMASK;
+1396:Lib/core_pins.h **** 				CORE_PIN9_PORTREG |=  CORE_PIN9_BITMASK;
+1397:Lib/core_pins.h **** 			} else if (pin == 10) {
+1398:Lib/core_pins.h **** 				CORE_PIN10_DDRREG  &= ~CORE_PIN10_BITMASK;
+1399:Lib/core_pins.h **** 				CORE_PIN10_PORTREG |=  CORE_PIN10_BITMASK;
+1400:Lib/core_pins.h **** 			} else if (pin == 11) {
+1401:Lib/core_pins.h **** 				CORE_PIN11_DDRREG  &= ~CORE_PIN11_BITMASK;
+1402:Lib/core_pins.h **** 				CORE_PIN11_PORTREG |=  CORE_PIN11_BITMASK;
+1403:Lib/core_pins.h **** 			} else if (pin == 12) {
+1404:Lib/core_pins.h **** 				CORE_PIN12_DDRREG  &= ~CORE_PIN12_BITMASK;
+1405:Lib/core_pins.h **** 				CORE_PIN12_PORTREG |=  CORE_PIN12_BITMASK;
+1406:Lib/core_pins.h **** 			} else if (pin == 13) {
+1407:Lib/core_pins.h **** 				CORE_PIN13_DDRREG  &= ~CORE_PIN13_BITMASK;
+1408:Lib/core_pins.h **** 				CORE_PIN13_PORTREG |=  CORE_PIN13_BITMASK;
+1409:Lib/core_pins.h **** 			} else if (pin == 14) {
+1410:Lib/core_pins.h **** 				CORE_PIN14_DDRREG  &= ~CORE_PIN14_BITMASK;
+1411:Lib/core_pins.h **** 				CORE_PIN14_PORTREG |=  CORE_PIN14_BITMASK;
+1412:Lib/core_pins.h **** 			} else if (pin == 15) {
+1413:Lib/core_pins.h **** 				CORE_PIN15_DDRREG  &= ~CORE_PIN15_BITMASK;
+1414:Lib/core_pins.h **** 				CORE_PIN15_PORTREG |=  CORE_PIN15_BITMASK;
+1415:Lib/core_pins.h **** 			} else if (pin == 16) {
+1416:Lib/core_pins.h **** 				CORE_PIN16_DDRREG  &= ~CORE_PIN16_BITMASK;
+1417:Lib/core_pins.h **** 				CORE_PIN16_PORTREG |=  CORE_PIN16_BITMASK;
+1418:Lib/core_pins.h **** 			} else if (pin == 17) {
+1419:Lib/core_pins.h **** 				CORE_PIN17_DDRREG  &= ~CORE_PIN17_BITMASK;
+1420:Lib/core_pins.h **** 				CORE_PIN17_PORTREG |=  CORE_PIN17_BITMASK;
+1421:Lib/core_pins.h **** 			} else if (pin == 18) {
+1422:Lib/core_pins.h **** 				CORE_PIN18_DDRREG  &= ~CORE_PIN18_BITMASK;
+1423:Lib/core_pins.h **** 				CORE_PIN18_PORTREG |=  CORE_PIN18_BITMASK;
+1424:Lib/core_pins.h **** 			} else if (pin == 19) {
+1425:Lib/core_pins.h **** 				CORE_PIN19_DDRREG  &= ~CORE_PIN19_BITMASK;
+1426:Lib/core_pins.h **** 				CORE_PIN19_PORTREG |=  CORE_PIN19_BITMASK;
+1427:Lib/core_pins.h **** 			} else if (pin == 20) {
+1428:Lib/core_pins.h **** 				CORE_PIN20_DDRREG  &= ~CORE_PIN20_BITMASK;
+1429:Lib/core_pins.h **** 				CORE_PIN20_PORTREG |=  CORE_PIN20_BITMASK;
+1430:Lib/core_pins.h **** 			}
+1431:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 21
+1432:Lib/core_pins.h **** 			  else if (pin == 21) {
+1433:Lib/core_pins.h **** 				CORE_PIN21_DDRREG  &= ~CORE_PIN21_BITMASK;
+1434:Lib/core_pins.h **** 				CORE_PIN21_PORTREG |=  CORE_PIN21_BITMASK;
+1435:Lib/core_pins.h **** 			} else if (pin == 22) {
+1436:Lib/core_pins.h **** 				CORE_PIN22_DDRREG  &= ~CORE_PIN22_BITMASK;
+1437:Lib/core_pins.h **** 				CORE_PIN22_PORTREG |=  CORE_PIN22_BITMASK;
+1438:Lib/core_pins.h **** 			} else if (pin == 23) {
+1439:Lib/core_pins.h **** 				CORE_PIN23_DDRREG  &= ~CORE_PIN23_BITMASK;
+1440:Lib/core_pins.h **** 				CORE_PIN23_PORTREG |=  CORE_PIN23_BITMASK;
+1441:Lib/core_pins.h **** 			} else if (pin == 24) {
+1442:Lib/core_pins.h **** 				CORE_PIN24_DDRREG  &= ~CORE_PIN24_BITMASK;
+1443:Lib/core_pins.h **** 				CORE_PIN24_PORTREG |=  CORE_PIN24_BITMASK;
+1444:Lib/core_pins.h **** 			}
+1445:Lib/core_pins.h **** 			#endif
+1446:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 25
+1447:Lib/core_pins.h **** 			  else if (pin == 25) {
+1448:Lib/core_pins.h **** 				CORE_PIN25_DDRREG  &= ~CORE_PIN25_BITMASK;
+1449:Lib/core_pins.h **** 				CORE_PIN25_PORTREG |=  CORE_PIN25_BITMASK;
+1450:Lib/core_pins.h **** 			} else if (pin == 26) {
+1451:Lib/core_pins.h **** 				CORE_PIN26_DDRREG  &= ~CORE_PIN26_BITMASK;
+1452:Lib/core_pins.h **** 				CORE_PIN26_PORTREG |=  CORE_PIN26_BITMASK;
+1453:Lib/core_pins.h **** 			} else if (pin == 27) {
+1454:Lib/core_pins.h **** 				CORE_PIN27_DDRREG  &= ~CORE_PIN27_BITMASK;
+1455:Lib/core_pins.h **** 				CORE_PIN27_PORTREG |=  CORE_PIN27_BITMASK;
+1456:Lib/core_pins.h **** 			} else if (pin == 28) {
+1457:Lib/core_pins.h **** 				CORE_PIN28_DDRREG  &= ~CORE_PIN28_BITMASK;
+1458:Lib/core_pins.h **** 				CORE_PIN28_PORTREG |=  CORE_PIN28_BITMASK;
+1459:Lib/core_pins.h **** 			} else if (pin == 29) {
+1460:Lib/core_pins.h **** 				CORE_PIN29_DDRREG  &= ~CORE_PIN29_BITMASK;
+1461:Lib/core_pins.h **** 				CORE_PIN29_PORTREG |=  CORE_PIN29_BITMASK;
+1462:Lib/core_pins.h **** 			} else if (pin == 30) {
+1463:Lib/core_pins.h **** 				CORE_PIN30_DDRREG  &= ~CORE_PIN30_BITMASK;
+1464:Lib/core_pins.h **** 				CORE_PIN30_PORTREG |=  CORE_PIN30_BITMASK;
+1465:Lib/core_pins.h **** 			} else if (pin == 31) {
+1466:Lib/core_pins.h **** 				CORE_PIN31_DDRREG  &= ~CORE_PIN31_BITMASK;
+1467:Lib/core_pins.h **** 				CORE_PIN31_PORTREG |=  CORE_PIN31_BITMASK;
+1468:Lib/core_pins.h **** 			} else if (pin == 32) {
+1469:Lib/core_pins.h **** 				CORE_PIN32_DDRREG  &= ~CORE_PIN32_BITMASK;
+1470:Lib/core_pins.h **** 				CORE_PIN32_PORTREG |=  CORE_PIN32_BITMASK;
+1471:Lib/core_pins.h **** 			} else if (pin == 33) {
+1472:Lib/core_pins.h **** 				CORE_PIN33_DDRREG  &= ~CORE_PIN33_BITMASK;
+1473:Lib/core_pins.h **** 				CORE_PIN33_PORTREG |=  CORE_PIN33_BITMASK;
+1474:Lib/core_pins.h **** 			} else if (pin == 34) {
+1475:Lib/core_pins.h **** 				CORE_PIN34_DDRREG  &= ~CORE_PIN34_BITMASK;
+1476:Lib/core_pins.h **** 				CORE_PIN34_PORTREG |=  CORE_PIN34_BITMASK;
+1477:Lib/core_pins.h **** 			} else if (pin == 35) {
+1478:Lib/core_pins.h **** 				CORE_PIN35_DDRREG  &= ~CORE_PIN35_BITMASK;
+1479:Lib/core_pins.h **** 				CORE_PIN35_PORTREG |=  CORE_PIN35_BITMASK;
+1480:Lib/core_pins.h **** 			} else if (pin == 36) {
+1481:Lib/core_pins.h **** 				CORE_PIN36_DDRREG  &= ~CORE_PIN36_BITMASK;
+1482:Lib/core_pins.h **** 				CORE_PIN36_PORTREG |=  CORE_PIN36_BITMASK;
+1483:Lib/core_pins.h **** 			} else if (pin == 37) {
+1484:Lib/core_pins.h **** 				CORE_PIN37_DDRREG  &= ~CORE_PIN37_BITMASK;
+1485:Lib/core_pins.h **** 				CORE_PIN37_PORTREG |=  CORE_PIN37_BITMASK;
+1486:Lib/core_pins.h **** 			} else if (pin == 38) {
+1487:Lib/core_pins.h **** 				CORE_PIN38_DDRREG  &= ~CORE_PIN38_BITMASK;
+1488:Lib/core_pins.h **** 				CORE_PIN38_PORTREG |=  CORE_PIN38_BITMASK;
+1489:Lib/core_pins.h **** 			} else if (pin == 39) {
+1490:Lib/core_pins.h **** 				CORE_PIN39_DDRREG  &= ~CORE_PIN39_BITMASK;
+1491:Lib/core_pins.h **** 				CORE_PIN39_PORTREG |=  CORE_PIN39_BITMASK;
+1492:Lib/core_pins.h **** 			} else if (pin == 40) {
+1493:Lib/core_pins.h **** 				CORE_PIN40_DDRREG  &= ~CORE_PIN40_BITMASK;
+1494:Lib/core_pins.h **** 				CORE_PIN40_PORTREG |=  CORE_PIN40_BITMASK;
+1495:Lib/core_pins.h **** 			} else if (pin == 41) {
+1496:Lib/core_pins.h **** 				CORE_PIN41_DDRREG  &= ~CORE_PIN41_BITMASK;
+1497:Lib/core_pins.h **** 				CORE_PIN41_PORTREG |=  CORE_PIN41_BITMASK;
+1498:Lib/core_pins.h **** 			} else if (pin == 42) {
+1499:Lib/core_pins.h **** 				CORE_PIN42_DDRREG  &= ~CORE_PIN42_BITMASK;
+1500:Lib/core_pins.h **** 				CORE_PIN42_PORTREG |=  CORE_PIN42_BITMASK;
+1501:Lib/core_pins.h **** 			} else if (pin == 43) {
+1502:Lib/core_pins.h **** 				CORE_PIN43_DDRREG  &= ~CORE_PIN43_BITMASK;
+1503:Lib/core_pins.h **** 				CORE_PIN43_PORTREG |=  CORE_PIN43_BITMASK;
+1504:Lib/core_pins.h **** 			} else if (pin == 44) {
+1505:Lib/core_pins.h **** 				CORE_PIN44_DDRREG  &= ~CORE_PIN44_BITMASK;
+1506:Lib/core_pins.h **** 				CORE_PIN44_PORTREG |=  CORE_PIN44_BITMASK;
+1507:Lib/core_pins.h **** 			} else if (pin == 45) {
+1508:Lib/core_pins.h **** 				CORE_PIN45_DDRREG  &= ~CORE_PIN45_BITMASK;
+1509:Lib/core_pins.h **** 				CORE_PIN45_PORTREG |=  CORE_PIN45_BITMASK;
+1510:Lib/core_pins.h **** 			}
+1511:Lib/core_pins.h **** 			#endif
+1512:Lib/core_pins.h **** 		} else {
+1513:Lib/core_pins.h **** 			if (pin == 0) {
+1514:Lib/core_pins.h **** 				CORE_PIN0_DDRREG  &= ~CORE_PIN0_BITMASK;
+1515:Lib/core_pins.h **** 				CORE_PIN0_PORTREG &= ~CORE_PIN0_BITMASK;
+1516:Lib/core_pins.h **** 			} else if (pin == 1) {
+1517:Lib/core_pins.h **** 				CORE_PIN1_DDRREG  &= ~CORE_PIN1_BITMASK;
+1518:Lib/core_pins.h **** 				CORE_PIN1_PORTREG &= ~CORE_PIN1_BITMASK;
+1519:Lib/core_pins.h **** 			} else if (pin == 2) {
+1520:Lib/core_pins.h **** 				CORE_PIN2_DDRREG  &= ~CORE_PIN2_BITMASK;
+1521:Lib/core_pins.h **** 				CORE_PIN2_PORTREG &= ~CORE_PIN2_BITMASK;
+1522:Lib/core_pins.h **** 			} else if (pin == 3) {
+1523:Lib/core_pins.h **** 				CORE_PIN3_DDRREG  &= ~CORE_PIN3_BITMASK;
+1524:Lib/core_pins.h **** 				CORE_PIN3_PORTREG &= ~CORE_PIN3_BITMASK;
+1525:Lib/core_pins.h **** 			} else if (pin == 4) {
+1526:Lib/core_pins.h **** 				CORE_PIN4_DDRREG  &= ~CORE_PIN4_BITMASK;
+1527:Lib/core_pins.h **** 				CORE_PIN4_PORTREG &= ~CORE_PIN4_BITMASK;
+1528:Lib/core_pins.h **** 			} else if (pin == 5) {
+1529:Lib/core_pins.h **** 				CORE_PIN5_DDRREG  &= ~CORE_PIN5_BITMASK;
+1530:Lib/core_pins.h **** 				CORE_PIN5_PORTREG &= ~CORE_PIN5_BITMASK;
+1531:Lib/core_pins.h **** 			} else if (pin == 6) {
+1532:Lib/core_pins.h **** 				CORE_PIN6_DDRREG  &= ~CORE_PIN6_BITMASK;
+1533:Lib/core_pins.h **** 				CORE_PIN6_PORTREG &= ~CORE_PIN6_BITMASK;
+1534:Lib/core_pins.h **** 			} else if (pin == 7) {
+1535:Lib/core_pins.h **** 				CORE_PIN7_DDRREG  &= ~CORE_PIN7_BITMASK;
+1536:Lib/core_pins.h **** 				CORE_PIN7_PORTREG &= ~CORE_PIN7_BITMASK;
+1537:Lib/core_pins.h **** 			} else if (pin == 8) {
+1538:Lib/core_pins.h **** 				CORE_PIN8_DDRREG  &= ~CORE_PIN8_BITMASK;
+1539:Lib/core_pins.h **** 				CORE_PIN8_PORTREG &= ~CORE_PIN8_BITMASK;
+1540:Lib/core_pins.h **** 			} else if (pin == 9) {
+1541:Lib/core_pins.h **** 				CORE_PIN9_DDRREG  &= ~CORE_PIN9_BITMASK;
+1542:Lib/core_pins.h **** 				CORE_PIN9_PORTREG &= ~CORE_PIN9_BITMASK;
+1543:Lib/core_pins.h **** 			} else if (pin == 10) {
+1544:Lib/core_pins.h **** 				CORE_PIN10_DDRREG  &= ~CORE_PIN10_BITMASK;
+1545:Lib/core_pins.h **** 				CORE_PIN10_PORTREG &= ~CORE_PIN10_BITMASK;
+1546:Lib/core_pins.h **** 			} else if (pin == 11) {
+1547:Lib/core_pins.h **** 				CORE_PIN11_DDRREG  &= ~CORE_PIN11_BITMASK;
+1548:Lib/core_pins.h **** 				CORE_PIN11_PORTREG &= ~CORE_PIN11_BITMASK;
+1549:Lib/core_pins.h **** 			} else if (pin == 12) {
+1550:Lib/core_pins.h **** 				CORE_PIN12_DDRREG  &= ~CORE_PIN12_BITMASK;
+1551:Lib/core_pins.h **** 				CORE_PIN12_PORTREG &= ~CORE_PIN12_BITMASK;
+1552:Lib/core_pins.h **** 			} else if (pin == 13) {
+1553:Lib/core_pins.h **** 				CORE_PIN13_DDRREG  &= ~CORE_PIN13_BITMASK;
+1554:Lib/core_pins.h **** 				CORE_PIN13_PORTREG &= ~CORE_PIN13_BITMASK;
+1555:Lib/core_pins.h **** 			} else if (pin == 14) {
+1556:Lib/core_pins.h **** 				CORE_PIN14_DDRREG  &= ~CORE_PIN14_BITMASK;
+1557:Lib/core_pins.h **** 				CORE_PIN14_PORTREG &= ~CORE_PIN14_BITMASK;
+1558:Lib/core_pins.h **** 			} else if (pin == 15) {
+1559:Lib/core_pins.h **** 				CORE_PIN15_DDRREG  &= ~CORE_PIN15_BITMASK;
+1560:Lib/core_pins.h **** 				CORE_PIN15_PORTREG &= ~CORE_PIN15_BITMASK;
+1561:Lib/core_pins.h **** 			} else if (pin == 16) {
+1562:Lib/core_pins.h **** 				CORE_PIN16_DDRREG  &= ~CORE_PIN16_BITMASK;
+1563:Lib/core_pins.h **** 				CORE_PIN16_PORTREG &= ~CORE_PIN16_BITMASK;
+1564:Lib/core_pins.h **** 			} else if (pin == 17) {
+1565:Lib/core_pins.h **** 				CORE_PIN17_DDRREG  &= ~CORE_PIN17_BITMASK;
+1566:Lib/core_pins.h **** 				CORE_PIN17_PORTREG &= ~CORE_PIN17_BITMASK;
+1567:Lib/core_pins.h **** 			} else if (pin == 18) {
+1568:Lib/core_pins.h **** 				CORE_PIN18_DDRREG  &= ~CORE_PIN18_BITMASK;
+1569:Lib/core_pins.h **** 				CORE_PIN18_PORTREG &= ~CORE_PIN18_BITMASK;
+1570:Lib/core_pins.h **** 			} else if (pin == 19) {
+1571:Lib/core_pins.h **** 				CORE_PIN19_DDRREG  &= ~CORE_PIN19_BITMASK;
+1572:Lib/core_pins.h **** 				CORE_PIN19_PORTREG &= ~CORE_PIN19_BITMASK;
+1573:Lib/core_pins.h **** 			} else if (pin == 20) {
+1574:Lib/core_pins.h **** 				CORE_PIN20_DDRREG  &= ~CORE_PIN20_BITMASK;
+1575:Lib/core_pins.h **** 				CORE_PIN20_PORTREG &= ~CORE_PIN20_BITMASK;
+1576:Lib/core_pins.h **** 			}
+1577:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 21
+1578:Lib/core_pins.h **** 			  else if (pin == 21) {
+1579:Lib/core_pins.h **** 				CORE_PIN21_DDRREG  &= ~CORE_PIN21_BITMASK;
+1580:Lib/core_pins.h **** 				CORE_PIN21_PORTREG &= ~CORE_PIN21_BITMASK;
+1581:Lib/core_pins.h **** 			} else if (pin == 22) {
+1582:Lib/core_pins.h **** 				CORE_PIN22_DDRREG  &= ~CORE_PIN22_BITMASK;
+1583:Lib/core_pins.h **** 				CORE_PIN22_PORTREG &= ~CORE_PIN22_BITMASK;
+1584:Lib/core_pins.h **** 			} else if (pin == 23) {
+1585:Lib/core_pins.h **** 				CORE_PIN23_DDRREG  &= ~CORE_PIN23_BITMASK;
+1586:Lib/core_pins.h **** 				CORE_PIN23_PORTREG &= ~CORE_PIN23_BITMASK;
+1587:Lib/core_pins.h **** 			} else if (pin == 24) {
+1588:Lib/core_pins.h **** 				CORE_PIN24_DDRREG  &= ~CORE_PIN24_BITMASK;
+1589:Lib/core_pins.h **** 				CORE_PIN24_PORTREG &= ~CORE_PIN24_BITMASK;
+1590:Lib/core_pins.h **** 			}
+1591:Lib/core_pins.h **** 			#endif
+1592:Lib/core_pins.h **** 			#if CORE_NUM_TOTAL_PINS > 25
+1593:Lib/core_pins.h **** 			  else if (pin == 25) {
+1594:Lib/core_pins.h **** 				CORE_PIN25_DDRREG  &= ~CORE_PIN25_BITMASK;
+1595:Lib/core_pins.h **** 				CORE_PIN25_PORTREG &= ~CORE_PIN25_BITMASK;
+1596:Lib/core_pins.h **** 			} else if (pin == 26) {
+1597:Lib/core_pins.h **** 				CORE_PIN26_DDRREG  &= ~CORE_PIN26_BITMASK;
+1598:Lib/core_pins.h **** 				CORE_PIN26_PORTREG &= ~CORE_PIN26_BITMASK;
+1599:Lib/core_pins.h **** 			} else if (pin == 27) {
+1600:Lib/core_pins.h **** 				CORE_PIN27_DDRREG  &= ~CORE_PIN27_BITMASK;
+1601:Lib/core_pins.h **** 				CORE_PIN27_PORTREG &= ~CORE_PIN27_BITMASK;
+1602:Lib/core_pins.h **** 			} else if (pin == 28) {
+1603:Lib/core_pins.h **** 				CORE_PIN28_DDRREG  &= ~CORE_PIN28_BITMASK;
+1604:Lib/core_pins.h **** 				CORE_PIN28_PORTREG &= ~CORE_PIN28_BITMASK;
+1605:Lib/core_pins.h **** 			} else if (pin == 29) {
+1606:Lib/core_pins.h **** 				CORE_PIN29_DDRREG  &= ~CORE_PIN29_BITMASK;
+1607:Lib/core_pins.h **** 				CORE_PIN29_PORTREG &= ~CORE_PIN29_BITMASK;
+1608:Lib/core_pins.h **** 			} else if (pin == 30) {
+1609:Lib/core_pins.h **** 				CORE_PIN30_DDRREG  &= ~CORE_PIN30_BITMASK;
+1610:Lib/core_pins.h **** 				CORE_PIN30_PORTREG &= ~CORE_PIN30_BITMASK;
+1611:Lib/core_pins.h **** 			} else if (pin == 31) {
+1612:Lib/core_pins.h **** 				CORE_PIN31_DDRREG  &= ~CORE_PIN31_BITMASK;
+1613:Lib/core_pins.h **** 				CORE_PIN31_PORTREG &= ~CORE_PIN31_BITMASK;
+1614:Lib/core_pins.h **** 			} else if (pin == 32) {
+1615:Lib/core_pins.h **** 				CORE_PIN32_DDRREG  &= ~CORE_PIN32_BITMASK;
+1616:Lib/core_pins.h **** 				CORE_PIN32_PORTREG &= ~CORE_PIN32_BITMASK;
+1617:Lib/core_pins.h **** 			} else if (pin == 33) {
+1618:Lib/core_pins.h **** 				CORE_PIN33_DDRREG  &= ~CORE_PIN33_BITMASK;
+1619:Lib/core_pins.h **** 				CORE_PIN33_PORTREG &= ~CORE_PIN33_BITMASK;
+1620:Lib/core_pins.h **** 			} else if (pin == 34) {
+1621:Lib/core_pins.h **** 				CORE_PIN34_DDRREG  &= ~CORE_PIN34_BITMASK;
+1622:Lib/core_pins.h **** 				CORE_PIN34_PORTREG &= ~CORE_PIN34_BITMASK;
+1623:Lib/core_pins.h **** 			} else if (pin == 35) {
+1624:Lib/core_pins.h **** 				CORE_PIN35_DDRREG  &= ~CORE_PIN35_BITMASK;
+1625:Lib/core_pins.h **** 				CORE_PIN35_PORTREG &= ~CORE_PIN35_BITMASK;
+1626:Lib/core_pins.h **** 			} else if (pin == 36) {
+1627:Lib/core_pins.h **** 				CORE_PIN36_DDRREG  &= ~CORE_PIN36_BITMASK;
+1628:Lib/core_pins.h **** 				CORE_PIN36_PORTREG &= ~CORE_PIN36_BITMASK;
+1629:Lib/core_pins.h **** 			} else if (pin == 37) {
+1630:Lib/core_pins.h **** 				CORE_PIN37_DDRREG  &= ~CORE_PIN37_BITMASK;
+1631:Lib/core_pins.h **** 				CORE_PIN37_PORTREG &= ~CORE_PIN37_BITMASK;
+1632:Lib/core_pins.h **** 			} else if (pin == 38) {
+1633:Lib/core_pins.h **** 				CORE_PIN38_DDRREG  &= ~CORE_PIN38_BITMASK;
+1634:Lib/core_pins.h **** 				CORE_PIN38_PORTREG &= ~CORE_PIN38_BITMASK;
+1635:Lib/core_pins.h **** 			} else if (pin == 39) {
+1636:Lib/core_pins.h **** 				CORE_PIN39_DDRREG  &= ~CORE_PIN39_BITMASK;
+1637:Lib/core_pins.h **** 				CORE_PIN39_PORTREG &= ~CORE_PIN39_BITMASK;
+1638:Lib/core_pins.h **** 			} else if (pin == 40) {
+1639:Lib/core_pins.h **** 				CORE_PIN40_DDRREG  &= ~CORE_PIN40_BITMASK;
+1640:Lib/core_pins.h **** 				CORE_PIN40_PORTREG &= ~CORE_PIN40_BITMASK;
+1641:Lib/core_pins.h **** 			} else if (pin == 41) {
+1642:Lib/core_pins.h **** 				CORE_PIN41_DDRREG  &= ~CORE_PIN41_BITMASK;
+1643:Lib/core_pins.h **** 				CORE_PIN41_PORTREG &= ~CORE_PIN41_BITMASK;
+1644:Lib/core_pins.h **** 			} else if (pin == 42) {
+1645:Lib/core_pins.h **** 				CORE_PIN42_DDRREG  &= ~CORE_PIN42_BITMASK;
+1646:Lib/core_pins.h **** 				CORE_PIN42_PORTREG &= ~CORE_PIN42_BITMASK;
+1647:Lib/core_pins.h **** 			} else if (pin == 43) {
+1648:Lib/core_pins.h **** 				CORE_PIN43_DDRREG  &= ~CORE_PIN43_BITMASK;
+1649:Lib/core_pins.h **** 				CORE_PIN43_PORTREG &= ~CORE_PIN43_BITMASK;
+1650:Lib/core_pins.h **** 			} else if (pin == 44) {
+1651:Lib/core_pins.h **** 				CORE_PIN44_DDRREG  &= ~CORE_PIN44_BITMASK;
+1652:Lib/core_pins.h **** 				CORE_PIN44_PORTREG &= ~CORE_PIN44_BITMASK;
+1653:Lib/core_pins.h **** 			} else if (pin == 45) {
+1654:Lib/core_pins.h **** 				CORE_PIN45_DDRREG  &= ~CORE_PIN45_BITMASK;
+1655:Lib/core_pins.h **** 				CORE_PIN45_PORTREG &= ~CORE_PIN45_BITMASK;
+1656:Lib/core_pins.h **** 			}
+1657:Lib/core_pins.h **** 			#endif
+1658:Lib/core_pins.h **** 		}
+1659:Lib/core_pins.h **** 		#if defined(__AVR_ATmega32U4__)
+1660:Lib/core_pins.h **** 		if (mode == INPUT || mode == INPUT_PULLUP) {
+1661:Lib/core_pins.h **** 			if (pin == 11) {
+1662:Lib/core_pins.h **** 				DIDR2 &= ~0x02;
+1663:Lib/core_pins.h **** 			} else if (pin == 12) {
+1664:Lib/core_pins.h **** 				DIDR2 &= ~0x04;
+1665:Lib/core_pins.h **** 			} else if (pin == 13) {
+1666:Lib/core_pins.h **** 				DIDR2 &= ~0x08;
+1667:Lib/core_pins.h **** 			} else if (pin == 14) {
+1668:Lib/core_pins.h **** 				DIDR2 &= ~0x10;
+1669:Lib/core_pins.h **** 			} else if (pin == 15) {
+1670:Lib/core_pins.h **** 				DIDR2 &= ~0x20;
+1671:Lib/core_pins.h **** 			} else if (pin == 16) {
+1672:Lib/core_pins.h **** 				DIDR0 &= ~0x80;
+1673:Lib/core_pins.h **** 			} else if (pin == 17) {
+1674:Lib/core_pins.h **** 				DIDR0 &= ~0x40;
+1675:Lib/core_pins.h **** 			} else if (pin == 18) {
+1676:Lib/core_pins.h **** 				DIDR0 &= ~0x20;
+1677:Lib/core_pins.h **** 			} else if (pin == 19) {
+1678:Lib/core_pins.h **** 				DIDR0 &= ~0x10;
+1679:Lib/core_pins.h **** 			} else if (pin == 20) {
+1680:Lib/core_pins.h **** 				DIDR0 &= ~0x02;
+1681:Lib/core_pins.h **** 			} else if (pin == 21) {
+1682:Lib/core_pins.h **** 				DIDR0 &= ~0x01;
+1683:Lib/core_pins.h **** 			} else if (pin == 22) {
+1684:Lib/core_pins.h **** 				DIDR2 &= ~0x01;
+1685:Lib/core_pins.h **** 			}
+1686:Lib/core_pins.h **** 		}
+1687:Lib/core_pins.h **** 		#elif defined(__AVR_AT90USB646__) || defined(__AVR_AT90USB1286__)
+1688:Lib/core_pins.h **** 		if (mode == INPUT || mode == INPUT_PULLUP) {
+1689:Lib/core_pins.h **** 			if (pin == 38) {
+1690:Lib/core_pins.h **** 				DIDR0 &= ~0x01;
+1691:Lib/core_pins.h **** 			} else if (pin == 39) {
+1692:Lib/core_pins.h **** 				DIDR0 &= ~0x02;
+1693:Lib/core_pins.h **** 			} else if (pin == 40) {
+1694:Lib/core_pins.h **** 				DIDR0 &= ~0x04;
+1695:Lib/core_pins.h **** 			} else if (pin == 41) {
+1696:Lib/core_pins.h **** 				DIDR0 &= ~0x08;
+1697:Lib/core_pins.h **** 			} else if (pin == 42) {
+1698:Lib/core_pins.h **** 				DIDR0 &= ~0x10;
+1699:Lib/core_pins.h **** 			} else if (pin == 43) {
+1700:Lib/core_pins.h **** 				DIDR0 &= ~0x20;
+1701:Lib/core_pins.h **** 			} else if (pin == 44) {
+1702:Lib/core_pins.h **** 				DIDR0 &= ~0x40;
+1703:Lib/core_pins.h **** 			} else if (pin == 45) {
+1704:Lib/core_pins.h **** 				DIDR0 &= ~0x80;
+1705:Lib/core_pins.h **** 			}
+1706:Lib/core_pins.h **** 		}
+1707:Lib/core_pins.h **** 		#endif
+1708:Lib/core_pins.h **** 	} else if (__builtin_constant_p(mode)) {
+1709:Lib/core_pins.h **** 		if (mode == OUTPUT) {
+1710:Lib/core_pins.h **** 			_pinMode_output(pin);
+ 320               		.loc 3 1710 0
+ 321 00fa 842F      		mov r24,r20
+ 322               	.LVL35:
+ 323 00fc 4983      		std Y+1,r20
+ 324 00fe 0E94 0000 		call _pinMode_output
+ 325               	.LVL36:
+ 326               	.LBE77:
+ 327               	.LBE76:
+ 328               	.LBB78:
+ 329               	.LBB79:
+1084:Lib/core_pins.h **** 				uint16_t tmp = (pin);
+ 330               		.loc 3 1084 0
+ 331 0102 4981      		ldd r20,Y+1
+ 332 0104 E42F      		mov r30,r20
+ 333 0106 F0E0      		ldi r31,0
+ 334               	.LVL37:
+1102:Lib/core_pins.h **** 				);
+ 335               		.loc 3 1102 0
+ 336               	/* #APP */
+ 337               	 ;  1102 "Lib/core_pins.h" 1
+ 338 0108 0E94 0000 		call _digitalWrite_LOW
+ 339               	 ;  0 "" 2
+ 340               	.LVL38:
+ 341               	/* #NOAPP */
+ 342               	.L33:
+ 343               	.LBE79:
+ 344               	.LBE78:
+  51:Lib/HardwareSerial.cpp **** 	if ((baud_count & 1) && baud_count <= 4096) {
+ 345               		.loc 1 51 0
+ 346 010c 00FF      		sbrs r16,0
+ 347 010e 00C0      		rjmp .L34
+  51:Lib/HardwareSerial.cpp **** 	if ((baud_count & 1) && baud_count <= 4096) {
+ 348               		.loc 1 51 0 is_stmt 0 discriminator 1
+ 349 0110 0130      		cpi r16,1
+ 350 0112 80E1      		ldi r24,16
+ 351 0114 1807      		cpc r17,r24
+ 352 0116 00F4      		brsh .L34
+  52:Lib/HardwareSerial.cpp **** 		UCSR1A = (1<<U2X1);
+ 353               		.loc 1 52 0 is_stmt 1
+ 354 0118 82E0      		ldi r24,lo8(2)
+ 355 011a 8093 C800 		sts 200,r24
+  53:Lib/HardwareSerial.cpp **** 		UBRR1 = baud_count - 1;
+ 356               		.loc 1 53 0
+ 357 011e C801      		movw r24,r16
+ 358 0120 00C0      		rjmp .L43
+ 359               	.L34:
+  55:Lib/HardwareSerial.cpp **** 		UCSR1A = 0;
+ 360               		.loc 1 55 0
+ 361 0122 1092 C800 		sts 200,__zero_reg__
+  56:Lib/HardwareSerial.cpp **** 		UBRR1 = (baud_count >> 1) - 1;
+ 362               		.loc 1 56 0
+ 363 0126 C801      		movw r24,r16
+ 364 0128 9695      		lsr r25
+ 365 012a 8795      		ror r24
+ 366               	.L43:
+ 367 012c 0197      		sbiw r24,1
+ 368 012e 9093 CD00 		sts 204+1,r25
+ 369 0132 8093 CC00 		sts 204,r24
+  58:Lib/HardwareSerial.cpp **** 	if (!(UCSR1B & (1<<TXEN1))) {
+ 370               		.loc 1 58 0
+ 371 0136 8091 C900 		lds r24,201
+ 372 013a 83FD      		sbrc r24,3
+ 373 013c 00C0      		rjmp .L32
+  59:Lib/HardwareSerial.cpp **** 		rx_buffer_head = 0;
+ 374               		.loc 1 59 0
+ 375 013e 1092 0000 		sts _ZL14rx_buffer_head,__zero_reg__
+  60:Lib/HardwareSerial.cpp **** 		rx_buffer_tail = 0;
+ 376               		.loc 1 60 0
+ 377 0142 1092 0000 		sts _ZL14rx_buffer_tail,__zero_reg__
+  61:Lib/HardwareSerial.cpp **** 		tx_buffer_head = 0;
+ 378               		.loc 1 61 0
+ 379 0146 1092 0000 		sts _ZL14tx_buffer_head,__zero_reg__
+  62:Lib/HardwareSerial.cpp **** 		tx_buffer_tail = 0;
+ 380               		.loc 1 62 0
+ 381 014a 1092 0000 		sts _ZL14tx_buffer_tail,__zero_reg__
+  63:Lib/HardwareSerial.cpp **** 		transmitting = 0;
+ 382               		.loc 1 63 0
+ 383 014e 1092 0000 		sts _ZL12transmitting,__zero_reg__
+  64:Lib/HardwareSerial.cpp **** 		UCSR1C = (1<<UCSZ11) | (1<<UCSZ10);
+ 384               		.loc 1 64 0
+ 385 0152 86E0      		ldi r24,lo8(6)
+ 386 0154 8093 CA00 		sts 202,r24
+  65:Lib/HardwareSerial.cpp **** 		UCSR1B = (1<<RXEN1) | (1<<TXCIE1) | (1<<TXEN1) | (1<<RXCIE1);
+ 387               		.loc 1 65 0
+ 388 0158 88ED      		ldi r24,lo8(-40)
+ 389 015a 8093 C900 		sts 201,r24
+ 390               	.L32:
+ 391               	/* epilogue start */
+  67:Lib/HardwareSerial.cpp **** }
+ 392               		.loc 1 67 0
+ 393 015e 0F90      		pop __tmp_reg__
+ 394 0160 DF91      		pop r29
+ 395 0162 CF91      		pop r28
+ 396 0164 1F91      		pop r17
+ 397 0166 0F91      		pop r16
+ 398               	.LVL39:
+ 399 0168 0895      		ret
+ 400               		.cfi_endproc
+ 401               	.LFE61:
+ 403               	.global	_ZN14HardwareSerial3endEv
+ 405               	_ZN14HardwareSerial3endEv:
+ 406               	.LFB62:
+  70:Lib/HardwareSerial.cpp **** {
+ 407               		.loc 1 70 0
+ 408               		.cfi_startproc
+ 409               	/* prologue: function */
+ 410               	/* frame size = 0 */
+ 411               	/* stack size = 0 */
+ 412               	.L__stack_usage = 0
+ 413               	.LVL40:
+ 414               	.L46:
+  71:Lib/HardwareSerial.cpp **** 	while (transmitting) ;	// wait for buffered data to send
+ 415               		.loc 1 71 0 discriminator 1
+ 416 016a 8091 0000 		lds r24,_ZL12transmitting
+ 417 016e 8111      		cpse r24,__zero_reg__
+ 418 0170 00C0      		rjmp .L46
+  72:Lib/HardwareSerial.cpp **** 	UCSR1B = 0;
+ 419               		.loc 1 72 0
+ 420 0172 1092 C900 		sts 201,__zero_reg__
+  73:Lib/HardwareSerial.cpp **** 	rx_buffer_head = 0;
+ 421               		.loc 1 73 0
+ 422 0176 1092 0000 		sts _ZL14rx_buffer_head,__zero_reg__
+  74:Lib/HardwareSerial.cpp **** 	rx_buffer_tail = 0;
+ 423               		.loc 1 74 0
+ 424 017a 1092 0000 		sts _ZL14rx_buffer_tail,__zero_reg__
+ 425 017e 0895      		ret
+ 426               		.cfi_endproc
+ 427               	.LFE62:
+ 429               	.global	_ZN14HardwareSerial17transmitterEnableEh
+ 431               	_ZN14HardwareSerial17transmitterEnableEh:
+ 432               	.LFB63:
+  78:Lib/HardwareSerial.cpp **** {
+ 433               		.loc 1 78 0
+ 434               		.cfi_startproc
+ 435               	.LVL41:
+ 436 0180 CF93      		push r28
+ 437               	.LCFI6:
+ 438               		.cfi_def_cfa_offset 3
+ 439               		.cfi_offset 28, -2
+ 440 0182 DF93      		push r29
+ 441               	.LCFI7:
+ 442               		.cfi_def_cfa_offset 4
+ 443               		.cfi_offset 29, -3
+ 444 0184 1F92      		push __zero_reg__
+ 445               	.LCFI8:
+ 446               		.cfi_def_cfa_offset 5
+ 447 0186 CDB7      		in r28,__SP_L__
+ 448 0188 DEB7      		in r29,__SP_H__
+ 449               	.LCFI9:
+ 450               		.cfi_def_cfa_register 28
+ 451               	/* prologue: function */
+ 452               	/* frame size = 1 */
+ 453               	/* stack size = 3 */
+ 454               	.L__stack_usage = 3
+ 455               	.LVL42:
+ 456               	.L49:
+  79:Lib/HardwareSerial.cpp **** 	while (transmitting) ;
+ 457               		.loc 1 79 0 discriminator 1
+ 458 018a 8091 0000 		lds r24,_ZL12transmitting
+ 459 018e 8111      		cpse r24,__zero_reg__
+ 460 0190 00C0      		rjmp .L49
+ 461               	.LVL43:
+ 462               	.LBB80:
+ 463               	.LBB81:
+ 464               		.loc 3 1710 0
+ 465 0192 862F      		mov r24,r22
+ 466 0194 6983      		std Y+1,r22
+ 467 0196 0E94 0000 		call _pinMode_output
+ 468               	.LVL44:
+ 469               	.LBE81:
+ 470               	.LBE80:
+ 471               	.LBB82:
+ 472               	.LBB83:
+1084:Lib/core_pins.h **** 				uint16_t tmp = (pin);
+ 473               		.loc 3 1084 0
+ 474 019a 6981      		ldd r22,Y+1
+ 475 019c E62F      		mov r30,r22
+ 476 019e F0E0      		ldi r31,0
+ 477               	.LVL45:
+1102:Lib/core_pins.h **** 				);
+ 478               		.loc 3 1102 0
+ 479               	/* #APP */
+ 480               	 ;  1102 "Lib/core_pins.h" 1
+ 481 01a0 0E94 0000 		call _digitalWrite_LOW
+ 482               	 ;  0 "" 2
+ 483               	.LVL46:
+ 484               	/* #NOAPP */
+ 485               	.LBE83:
+ 486               	.LBE82:
+  82:Lib/HardwareSerial.cpp **** 	tx_enable_pin = pin;
+ 487               		.loc 1 82 0
+ 488 01a4 6093 0000 		sts _ZL13tx_enable_pin,r22
+ 489               	/* epilogue start */
+  83:Lib/HardwareSerial.cpp **** }
+ 490               		.loc 1 83 0
+ 491 01a8 0F90      		pop __tmp_reg__
+ 492               	.LVL47:
+ 493 01aa DF91      		pop r29
+ 494               	.LVL48:
+ 495 01ac CF91      		pop r28
+ 496               	.LVL49:
+ 497 01ae 0895      		ret
+ 498               		.cfi_endproc
+ 499               	.LFE63:
+ 501               	.global	_ZN14HardwareSerial5clearEv
+ 503               	_ZN14HardwareSerial5clearEv:
+ 504               	.LFB68:
+ 128:Lib/HardwareSerial.cpp **** {
+ 505               		.loc 1 128 0
+ 506               		.cfi_startproc
+ 507               	.LVL50:
+ 508               	/* prologue: function */
+ 509               	/* frame size = 0 */
+ 510               	/* stack size = 0 */
+ 511               	.L__stack_usage = 0
+ 129:Lib/HardwareSerial.cpp **** 	rx_buffer_head = rx_buffer_tail;
+ 512               		.loc 1 129 0
+ 513 01b0 8091 0000 		lds r24,_ZL14rx_buffer_tail
+ 514               	.LVL51:
+ 515 01b4 8093 0000 		sts _ZL14rx_buffer_head,r24
+ 516 01b8 0895      		ret
+ 517               		.cfi_endproc
+ 518               	.LFE68:
+ 520               	.global	__vector_25
+ 522               	__vector_25:
+ 523               	.LFB70:
+ 158:Lib/HardwareSerial.cpp **** #if ARDUINO >= 100
+ 159:Lib/HardwareSerial.cpp **** 	return 1;
+ 160:Lib/HardwareSerial.cpp **** #endif
+ 161:Lib/HardwareSerial.cpp **** }
+ 162:Lib/HardwareSerial.cpp **** 
+ 163:Lib/HardwareSerial.cpp **** ISR(USART1_RX_vect)
+ 164:Lib/HardwareSerial.cpp **** {
+ 524               		.loc 1 164 0
+ 525               		.cfi_startproc
+ 526 01ba 1F92      		push r1
+ 527               	.LCFI10:
+ 528               		.cfi_def_cfa_offset 3
+ 529               		.cfi_offset 1, -2
+ 530 01bc 0F92      		push r0
+ 531               	.LCFI11:
+ 532               		.cfi_def_cfa_offset 4
+ 533               		.cfi_offset 0, -3
+ 534 01be 0FB6      		in r0,__SREG__
+ 535 01c0 0F92      		push r0
+ 536 01c2 1124      		clr __zero_reg__
+ 537 01c4 0BB6      		in r0,__RAMPZ__
+ 538 01c6 0F92      		push r0
+ 539 01c8 2F93      		push r18
+ 540               	.LCFI12:
+ 541               		.cfi_def_cfa_offset 5
+ 542               		.cfi_offset 18, -4
+ 543 01ca 8F93      		push r24
+ 544               	.LCFI13:
+ 545               		.cfi_def_cfa_offset 6
+ 546               		.cfi_offset 24, -5
+ 547 01cc 9F93      		push r25
+ 548               	.LCFI14:
+ 549               		.cfi_def_cfa_offset 7
+ 550               		.cfi_offset 25, -6
+ 551 01ce EF93      		push r30
+ 552               	.LCFI15:
+ 553               		.cfi_def_cfa_offset 8
+ 554               		.cfi_offset 30, -7
+ 555 01d0 FF93      		push r31
+ 556               	.LCFI16:
+ 557               		.cfi_def_cfa_offset 9
+ 558               		.cfi_offset 31, -8
+ 559               	/* prologue: Signal */
+ 560               	/* frame size = 0 */
+ 561               	/* stack size = 9 */
+ 562               	.L__stack_usage = 9
+ 563               	.LBB84:
+ 165:Lib/HardwareSerial.cpp **** 	uint8_t c, i;
+ 166:Lib/HardwareSerial.cpp **** 
+ 167:Lib/HardwareSerial.cpp **** 	c = UDR1;
+ 564               		.loc 1 167 0
+ 565 01d2 9091 CE00 		lds r25,206
+ 566               	.LVL52:
+ 168:Lib/HardwareSerial.cpp **** 	i = rx_buffer_head + 1;
+ 567               		.loc 1 168 0
+ 568 01d6 8091 0000 		lds r24,_ZL14rx_buffer_head
+ 569 01da 8F5F      		subi r24,lo8(-(1))
+ 570               	.LVL53:
+ 169:Lib/HardwareSerial.cpp **** 	if (i >= RX_BUFFER_SIZE) i = 0;
+ 571               		.loc 1 169 0
+ 572 01dc 8034      		cpi r24,lo8(64)
+ 573 01de 00F0      		brlo .L52
+ 574 01e0 80E0      		ldi r24,0
+ 575               	.LVL54:
+ 576               	.L52:
+ 170:Lib/HardwareSerial.cpp **** 	if (i != rx_buffer_tail) {
+ 577               		.loc 1 170 0
+ 578 01e2 2091 0000 		lds r18,_ZL14rx_buffer_tail
+ 579 01e6 8217      		cp r24,r18
+ 580 01e8 01F0      		breq .L51
+ 171:Lib/HardwareSerial.cpp **** 		rx_buffer[i] = c;
+ 581               		.loc 1 171 0
+ 582 01ea E82F      		mov r30,r24
+ 583 01ec F0E0      		ldi r31,0
+ 584 01ee E050      		subi r30,lo8(-(_ZL9rx_buffer))
+ 585 01f0 F040      		sbci r31,hi8(-(_ZL9rx_buffer))
+ 586 01f2 9083      		st Z,r25
+ 172:Lib/HardwareSerial.cpp **** 		rx_buffer_head = i;
+ 587               		.loc 1 172 0
+ 588 01f4 8093 0000 		sts _ZL14rx_buffer_head,r24
+ 589               	.L51:
+ 590               	/* epilogue start */
+ 591               	.LBE84:
+ 173:Lib/HardwareSerial.cpp **** 	}
+ 174:Lib/HardwareSerial.cpp **** }
+ 592               		.loc 1 174 0
+ 593 01f8 FF91      		pop r31
+ 594 01fa EF91      		pop r30
+ 595 01fc 9F91      		pop r25
+ 596               	.LVL55:
+ 597 01fe 8F91      		pop r24
+ 598               	.LVL56:
+ 599 0200 2F91      		pop r18
+ 600 0202 0F90      		pop r0
+ 601 0204 0BBE      		out __RAMPZ__,r0
+ 602 0206 0F90      		pop r0
+ 603 0208 0FBE      		out __SREG__,r0
+ 604 020a 0F90      		pop r0
+ 605 020c 1F90      		pop r1
+ 606 020e 1895      		reti
+ 607               		.cfi_endproc
+ 608               	.LFE70:
+ 610               	.global	__vector_26
+ 612               	__vector_26:
+ 613               	.LFB71:
+ 175:Lib/HardwareSerial.cpp **** 
+ 176:Lib/HardwareSerial.cpp **** ISR(USART1_UDRE_vect)
+ 177:Lib/HardwareSerial.cpp **** {
+ 614               		.loc 1 177 0
+ 615               		.cfi_startproc
+ 616 0210 1F92      		push r1
+ 617               	.LCFI17:
+ 618               		.cfi_def_cfa_offset 3
+ 619               		.cfi_offset 1, -2
+ 620 0212 0F92      		push r0
+ 621               	.LCFI18:
+ 622               		.cfi_def_cfa_offset 4
+ 623               		.cfi_offset 0, -3
+ 624 0214 0FB6      		in r0,__SREG__
+ 625 0216 0F92      		push r0
+ 626 0218 1124      		clr __zero_reg__
+ 627 021a 0BB6      		in r0,__RAMPZ__
+ 628 021c 0F92      		push r0
+ 629 021e 8F93      		push r24
+ 630               	.LCFI19:
+ 631               		.cfi_def_cfa_offset 5
+ 632               		.cfi_offset 24, -4
+ 633 0220 9F93      		push r25
+ 634               	.LCFI20:
+ 635               		.cfi_def_cfa_offset 6
+ 636               		.cfi_offset 25, -5
+ 637 0222 EF93      		push r30
+ 638               	.LCFI21:
+ 639               		.cfi_def_cfa_offset 7
+ 640               		.cfi_offset 30, -6
+ 641 0224 FF93      		push r31
+ 642               	.LCFI22:
+ 643               		.cfi_def_cfa_offset 8
+ 644               		.cfi_offset 31, -7
+ 645               	/* prologue: Signal */
+ 646               	/* frame size = 0 */
+ 647               	/* stack size = 8 */
+ 648               	.L__stack_usage = 8
+ 649               	.LBB85:
+ 178:Lib/HardwareSerial.cpp **** 	uint8_t i;
+ 179:Lib/HardwareSerial.cpp **** 
+ 180:Lib/HardwareSerial.cpp **** 	if (tx_buffer_head == tx_buffer_tail) {
+ 650               		.loc 1 180 0
+ 651 0226 9091 0000 		lds r25,_ZL14tx_buffer_head
+ 652 022a 8091 0000 		lds r24,_ZL14tx_buffer_tail
+ 653 022e 9813      		cpse r25,r24
+ 654 0230 00C0      		rjmp .L56
+ 181:Lib/HardwareSerial.cpp **** 		// buffer is empty, disable transmit interrupt
+ 182:Lib/HardwareSerial.cpp **** 		UCSR1B = (1<<RXEN1) | (1<<TXCIE1) | (1<<TXEN1) | (1<<RXCIE1);
+ 655               		.loc 1 182 0
+ 656 0232 88ED      		ldi r24,lo8(-40)
+ 657 0234 8093 C900 		sts 201,r24
+ 658 0238 00C0      		rjmp .L55
+ 659               	.L56:
+ 183:Lib/HardwareSerial.cpp **** 	} else {
+ 184:Lib/HardwareSerial.cpp **** 		i = tx_buffer_tail + 1;
+ 660               		.loc 1 184 0
+ 661 023a 8091 0000 		lds r24,_ZL14tx_buffer_tail
+ 662 023e 8F5F      		subi r24,lo8(-(1))
+ 663               	.LVL57:
+ 185:Lib/HardwareSerial.cpp **** 		if (i >= TX_BUFFER_SIZE) i = 0;
+ 664               		.loc 1 185 0
+ 665 0240 8832      		cpi r24,lo8(40)
+ 666 0242 00F0      		brlo .L58
+ 667 0244 80E0      		ldi r24,0
+ 668               	.LVL58:
+ 669               	.L58:
+ 186:Lib/HardwareSerial.cpp **** 		UDR1 = tx_buffer[i];
+ 670               		.loc 1 186 0
+ 671 0246 E82F      		mov r30,r24
+ 672 0248 F0E0      		ldi r31,0
+ 673 024a E050      		subi r30,lo8(-(_ZL9tx_buffer))
+ 674 024c F040      		sbci r31,hi8(-(_ZL9tx_buffer))
+ 675 024e 9081      		ld r25,Z
+ 676 0250 9093 CE00 		sts 206,r25
+ 187:Lib/HardwareSerial.cpp **** 		tx_buffer_tail = i;
+ 677               		.loc 1 187 0
+ 678 0254 8093 0000 		sts _ZL14tx_buffer_tail,r24
+ 679               	.LVL59:
+ 680               	.L55:
+ 681               	/* epilogue start */
+ 682               	.LBE85:
+ 188:Lib/HardwareSerial.cpp **** 	}
+ 189:Lib/HardwareSerial.cpp **** }
+ 683               		.loc 1 189 0
+ 684 0258 FF91      		pop r31
+ 685 025a EF91      		pop r30
+ 686 025c 9F91      		pop r25
+ 687 025e 8F91      		pop r24
+ 688 0260 0F90      		pop r0
+ 689 0262 0BBE      		out __RAMPZ__,r0
+ 690 0264 0F90      		pop r0
+ 691 0266 0FBE      		out __SREG__,r0
+ 692 0268 0F90      		pop r0
+ 693 026a 1F90      		pop r1
+ 694 026c 1895      		reti
+ 695               		.cfi_endproc
+ 696               	.LFE71:
+ 698               	.global	__vector_27
+ 700               	__vector_27:
+ 701               	.LFB72:
+ 190:Lib/HardwareSerial.cpp **** 
+ 191:Lib/HardwareSerial.cpp **** ISR(USART1_TX_vect)
+ 192:Lib/HardwareSerial.cpp **** {
+ 702               		.loc 1 192 0
+ 703               		.cfi_startproc
+ 704 026e 1F92      		push r1
+ 705               	.LCFI23:
+ 706               		.cfi_def_cfa_offset 3
+ 707               		.cfi_offset 1, -2
+ 708 0270 0F92      		push r0
+ 709               	.LCFI24:
+ 710               		.cfi_def_cfa_offset 4
+ 711               		.cfi_offset 0, -3
+ 712 0272 0FB6      		in r0,__SREG__
+ 713 0274 0F92      		push r0
+ 714 0276 1124      		clr __zero_reg__
+ 715 0278 0BB6      		in r0,__RAMPZ__
+ 716 027a 0F92      		push r0
+ 717 027c 8F93      		push r24
+ 718               	.LCFI25:
+ 719               		.cfi_def_cfa_offset 5
+ 720               		.cfi_offset 24, -4
+ 721 027e EF93      		push r30
+ 722               	.LCFI26:
+ 723               		.cfi_def_cfa_offset 6
+ 724               		.cfi_offset 30, -5
+ 725 0280 FF93      		push r31
+ 726               	.LCFI27:
+ 727               		.cfi_def_cfa_offset 7
+ 728               		.cfi_offset 31, -6
+ 729               	/* prologue: Signal */
+ 730               	/* frame size = 0 */
+ 731               	/* stack size = 7 */
+ 732               	.L__stack_usage = 7
+ 193:Lib/HardwareSerial.cpp **** 	transmitting = 0;
+ 733               		.loc 1 193 0
+ 734 0282 1092 0000 		sts _ZL12transmitting,__zero_reg__
+ 194:Lib/HardwareSerial.cpp **** 	if (tx_enable_pin < 255) {
+ 735               		.loc 1 194 0
+ 736 0286 8091 0000 		lds r24,_ZL13tx_enable_pin
+ 737 028a 8F3F      		cpi r24,lo8(-1)
+ 738 028c 01F0      		breq .L60
+ 195:Lib/HardwareSerial.cpp **** 		digitalWrite(tx_enable_pin, LOW);
+ 739               		.loc 1 195 0
+ 740 028e E091 0000 		lds r30,_ZL13tx_enable_pin
+ 741               	.LVL60:
+ 742               	.LBB86:
+ 743               	.LBB87:
+1084:Lib/core_pins.h **** 				uint16_t tmp = (pin);
+ 744               		.loc 3 1084 0
+ 745 0292 F0E0      		ldi r31,0
+ 746               	.LVL61:
+1102:Lib/core_pins.h **** 				);
+ 747               		.loc 3 1102 0
+ 748               	/* #APP */
+ 749               	 ;  1102 "Lib/core_pins.h" 1
+ 750 0294 0E94 0000 		call _digitalWrite_LOW
+ 751               	 ;  0 "" 2
+ 752               	.LVL62:
+ 753               	/* #NOAPP */
+ 754               	.L60:
+ 755               	/* epilogue start */
+ 756               	.LBE87:
+ 757               	.LBE86:
+ 196:Lib/HardwareSerial.cpp **** 	}
+ 197:Lib/HardwareSerial.cpp **** }
+ 758               		.loc 1 197 0
+ 759 0298 FF91      		pop r31
+ 760 029a EF91      		pop r30
+ 761 029c 8F91      		pop r24
+ 762 029e 0F90      		pop r0
+ 763 02a0 0BBE      		out __RAMPZ__,r0
+ 764 02a2 0F90      		pop r0
+ 765 02a4 0FBE      		out __SREG__,r0
+ 766 02a6 0F90      		pop r0
+ 767 02a8 1F90      		pop r1
+ 768 02aa 1895      		reti
+ 769               		.cfi_endproc
+ 770               	.LFE72:
+ 772               		.section	.text.startup,"ax",@progbits
+ 774               	_GLOBAL__sub_I__ZN14HardwareSerial6_beginEjh:
+ 775               	.LFB77:
+ 198:Lib/HardwareSerial.cpp **** 
+ 199:Lib/HardwareSerial.cpp **** // Preinstantiate Objects //////////////////////////////////////////////////////
+ 200:Lib/HardwareSerial.cpp **** 
+ 201:Lib/HardwareSerial.cpp **** HardwareSerial Serial1;
+ 776               		.loc 1 201 0
+ 777               		.cfi_startproc
+ 778               	/* prologue: function */
+ 779               	/* frame size = 0 */
+ 780               	/* stack size = 0 */
+ 781               	.L__stack_usage = 0
+ 782               	.LVL63:
+ 783               	.LBB98:
+ 784               	.LBB99:
+ 785               	.LBB100:
+ 786               	.LBB101:
+ 787               	.LBB102:
+ 788               	.LBB103:
+ 789               	.LBB104:
+  42:Lib/Print.h   **** 	Print() : write_error(0) {}
+ 790               		.loc 2 42 0
+ 791 0000 1092 0000 		sts Serial1+2,__zero_reg__
+ 792               	.LBE104:
+ 793               	.LBE103:
+ 794               		.file 4 "Lib/Stream.h"
+   1:Lib/Stream.h  **** /*
+   2:Lib/Stream.h  ****   Stream.h - base class for character-based streams.
+   3:Lib/Stream.h  ****   Copyright (c) 2010 David A. Mellis.  All right reserved.
+   4:Lib/Stream.h  **** 
+   5:Lib/Stream.h  ****   This library is free software; you can redistribute it and/or
+   6:Lib/Stream.h  ****   modify it under the terms of the GNU Lesser General Public
+   7:Lib/Stream.h  ****   License as published by the Free Software Foundation; either
+   8:Lib/Stream.h  ****   version 2.1 of the License, or (at your option) any later version.
+   9:Lib/Stream.h  **** 
+  10:Lib/Stream.h  ****   This library is distributed in the hope that it will be useful,
+  11:Lib/Stream.h  ****   but WITHOUT ANY WARRANTY; without even the implied warranty of
+  12:Lib/Stream.h  ****   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  13:Lib/Stream.h  ****   Lesser General Public License for more details.
+  14:Lib/Stream.h  **** 
+  15:Lib/Stream.h  ****   You should have received a copy of the GNU Lesser General Public
+  16:Lib/Stream.h  ****   License along with this library; if not, write to the Free Software
+  17:Lib/Stream.h  ****   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+  18:Lib/Stream.h  **** */
+  19:Lib/Stream.h  **** 
+  20:Lib/Stream.h  **** #ifndef Stream_h
+  21:Lib/Stream.h  **** #define Stream_h
+  22:Lib/Stream.h  **** 
+  23:Lib/Stream.h  **** #include <inttypes.h>
+  24:Lib/Stream.h  **** #include "Print.h"
+  25:Lib/Stream.h  **** 
+  26:Lib/Stream.h  **** class Stream : public Print
+  27:Lib/Stream.h  **** {
+  28:Lib/Stream.h  ****   public:
+  29:Lib/Stream.h  **** 	Stream() : _timeout(1000), read_error(0) {}
+ 795               		.loc 4 29 0
+ 796 0004 88EE      		ldi r24,lo8(-24)
+ 797 0006 93E0      		ldi r25,lo8(3)
+ 798 0008 A0E0      		ldi r26,0
+ 799 000a B0E0      		ldi r27,0
+ 800 000c 8093 0000 		sts Serial1+3,r24
+ 801 0010 9093 0000 		sts Serial1+3+1,r25
+ 802 0014 A093 0000 		sts Serial1+3+2,r26
+ 803 0018 B093 0000 		sts Serial1+3+3,r27
+ 804 001c 1092 0000 		sts Serial1+7,__zero_reg__
+ 805               	.LBE102:
+ 806               	.LBE101:
+ 807               		.file 5 "Lib/HardwareSerial.h"
+   1:Lib/HardwareSerial.h **** #ifndef HardwareSerial_h
+   2:Lib/HardwareSerial.h **** #define HardwareSerial_h
+   3:Lib/HardwareSerial.h **** 
+   4:Lib/HardwareSerial.h **** #include <inttypes.h>
+   5:Lib/HardwareSerial.h **** #include "Stream.h"
+   6:Lib/HardwareSerial.h **** 
+   7:Lib/HardwareSerial.h **** class HardwareSerial : public Stream
+ 808               		.loc 5 7 0
+ 809 0020 80E0      		ldi r24,lo8(_ZTV14HardwareSerial+4)
+ 810 0022 90E0      		ldi r25,hi8(_ZTV14HardwareSerial+4)
+ 811 0024 9093 0000 		sts Serial1+1,r25
+ 812 0028 8093 0000 		sts Serial1,r24
+ 813 002c 0895      		ret
+ 814               	.LBE100:
+ 815               	.LBE99:
+ 816               	.LBE98:
+ 817               		.cfi_endproc
+ 818               	.LFE77:
+ 820               		.global __do_global_ctors
+ 821               		.section .ctors,"a",@progbits
+ 822               		.p2align	1
+ 823 0000 0000      		.word	gs(_GLOBAL__sub_I__ZN14HardwareSerial6_beginEjh)
+ 824               		.weak	_ZTV14HardwareSerial
+ 825               		.section	.rodata._ZTV14HardwareSerial,"aG",@progbits,_ZTV14HardwareSerial,comdat
+ 828               	_ZTV14HardwareSerial:
+ 829 0000 0000      		.word	0
+ 830 0002 0000      		.word	0
+ 831 0004 0000      		.word	gs(_ZN14HardwareSerial5writeEh)
+ 832 0006 0000      		.word	gs(_ZN5Print5writeEPKhj)
+ 833 0008 0000      		.word	gs(_ZN14HardwareSerial9availableEv)
+ 834 000a 0000      		.word	gs(_ZN14HardwareSerial4readEv)
+ 835 000c 0000      		.word	gs(_ZN14HardwareSerial4peekEv)
+ 836 000e 0000      		.word	gs(_ZN14HardwareSerial5flushEv)
+ 837               	.global	Serial1
+ 838               		.section .bss
+ 841               	Serial1:
+ 842 0000 0000 0000 		.zero	8
+ 842      0000 0000 
+ 843               		.data
+ 846               	_ZL13tx_enable_pin:
+ 847 0000 FF        		.byte	-1
+ 848               		.local	_ZL12transmitting
+ 849               		.comm	_ZL12transmitting,1,1
+ 850               		.local	_ZL14tx_buffer_tail
+ 851               		.comm	_ZL14tx_buffer_tail,1,1
+ 852               		.local	_ZL14tx_buffer_head
+ 853               		.comm	_ZL14tx_buffer_head,1,1
+ 854               		.local	_ZL9tx_buffer
+ 855               		.comm	_ZL9tx_buffer,40,1
+ 856               		.local	_ZL14rx_buffer_tail
+ 857               		.comm	_ZL14rx_buffer_tail,1,1
+ 858               		.local	_ZL14rx_buffer_head
+ 859               		.comm	_ZL14rx_buffer_head,1,1
+ 860               		.local	_ZL9rx_buffer
+ 861               		.comm	_ZL9rx_buffer,64,1
+ 862               		.text
+ 863               	.Letext0:
+ 864               		.file 6 "/usr/lib/avr/include/stdint.h"
+ 865               		.file 7 "/usr/lib/gcc/avr/4.8.2/include/stddef.h"
+DEFINED SYMBOLS
+                            *ABS*:00000000 HardwareSerial.cpp
+     /tmp/ccNPTTdP.s:2      *ABS*:0000003e __SP_H__
+     /tmp/ccNPTTdP.s:3      *ABS*:0000003d __SP_L__
+     /tmp/ccNPTTdP.s:4      *ABS*:0000003f __SREG__
+     /tmp/ccNPTTdP.s:5      *ABS*:0000003b __RAMPZ__
+     /tmp/ccNPTTdP.s:6      *ABS*:00000000 __tmp_reg__
+     /tmp/ccNPTTdP.s:7      *ABS*:00000001 __zero_reg__
+     /tmp/ccNPTTdP.s:13     .text:00000000 _ZN14HardwareSerial9availableEv
+     /tmp/ccNPTTdP.s:857    .bss:00000034 _ZL14rx_buffer_head
+     /tmp/ccNPTTdP.s:855    .bss:00000033 _ZL14rx_buffer_tail
+     /tmp/ccNPTTdP.s:52     .text:0000001e _ZN14HardwareSerial4peekEv
+     /tmp/ccNPTTdP.s:859    .bss:00000035 _ZL9rx_buffer
+     /tmp/ccNPTTdP.s:102    .text:00000044 _ZN14HardwareSerial4readEv
+     /tmp/ccNPTTdP.s:154    .text:00000074 _ZN14HardwareSerial5flushEv
+                             .bss:00000008 _ZL12transmitting
+     /tmp/ccNPTTdP.s:176    .text:0000007e _ZN14HardwareSerial5writeEh
+     /tmp/ccNPTTdP.s:846    .data:00000000 _ZL13tx_enable_pin
+     /tmp/ccNPTTdP.s:851    .bss:0000000a _ZL14tx_buffer_head
+     /tmp/ccNPTTdP.s:849    .bss:00000009 _ZL14tx_buffer_tail
+     /tmp/ccNPTTdP.s:853    .bss:0000000b _ZL9tx_buffer
+     /tmp/ccNPTTdP.s:279    .text:000000e2 _ZN14HardwareSerial6_beginEjh
+     /tmp/ccNPTTdP.s:405    .text:0000016a _ZN14HardwareSerial3endEv
+     /tmp/ccNPTTdP.s:431    .text:00000180 _ZN14HardwareSerial17transmitterEnableEh
+     /tmp/ccNPTTdP.s:503    .text:000001b0 _ZN14HardwareSerial5clearEv
+     /tmp/ccNPTTdP.s:522    .text:000001ba __vector_25
+     /tmp/ccNPTTdP.s:612    .text:00000210 __vector_26
+     /tmp/ccNPTTdP.s:700    .text:0000026e __vector_27
+     /tmp/ccNPTTdP.s:774    .text.startup:00000000 _GLOBAL__sub_I__ZN14HardwareSerial6_beginEjh
+     /tmp/ccNPTTdP.s:841    .bss:00000000 Serial1
+     /tmp/ccNPTTdP.s:828    .rodata._ZTV14HardwareSerial:00000000 _ZTV14HardwareSerial
+
+UNDEFINED SYMBOLS
+_digitalWrite_HIGH
+_pinMode_output
+_digitalWrite_LOW
+__do_global_ctors
+_ZN5Print5writeEPKhj
+__do_copy_data
+__do_clear_bss
