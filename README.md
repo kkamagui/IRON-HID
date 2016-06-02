@@ -6,10 +6,10 @@
 
 [HITBSecConf 2016 Amsterdam Presentation](http://conference.hitb.org/hitbsecconf2016ams/materials/D1T2%20-%20Seunghun%20Han%20-%20Create%20Your%20Own%20Bad%20USB%20Device.pdf)
 
-[HITBSecConf 2016 Amsterdam Demo Video - Android phone PIN Brute-force Test](http://youtu.be/rkTEXyGt8bw)
-[HITBSecConf 2016 Amsterdam Demo Video - Android phone Hidden Menu Test](http://youtu.be/eahTstqfHKs)
-[HITBSecConf 2016 Amsterdam Demo Video - POS System Test](http://youtu.be/5-a4Nao9gtA)
-
+HITBSecConf 2016 Amsterdam Demo Links:
+- [Android phone PIN Brute-force Test](http://youtu.be/rkTEXyGt8bw)
+- [Android phone Hidden Menu Test](http://youtu.be/eahTstqfHKs)
+- [POS System Test](http://youtu.be/5-a4Nao9gtA)
 
 Although embedded hardware hacking seems to be an out-of-date technique, it is still dangerous and effective.  I created a project called “IRON-HID” – a platform for security validation that can create various types of USB devices such as HID (Human Interface Device) type, mass-storage type, and vendor-specific type. The IRON-HID contains installable software that enables you to gain full control of the target machine. You can then perform whatever actions you want on the target device via an Android smartphone application (IRON-HID Commander application).
 
@@ -62,9 +62,9 @@ The commander program is made in Android Studio. The source codes are in “Comm
 
 See under links.
 
-[HITBSecConf 2016 Amsterdam Demo Video - Android phone PIN Brute-force Test](http://youtu.be/rkTEXyGt8bw)
-[HITBSecConf 2016 Amsterdam Demo Video - Android phone Hidden Menu Test](http://youtu.be/eahTstqfHKs)
-[HITBSecConf 2016 Amsterdam Demo Video - POS System Test](http://youtu.be/5-a4Nao9gtA)
+- [Demo Video - Android phone PIN Brute-force Test](http://youtu.be/rkTEXyGt8bw)
+- [Demo Video - Android phone Hidden Menu Test](http://youtu.be/eahTstqfHKs)
+- [Demo Video - POS System Test](http://youtu.be/5-a4Nao9gtA)
 
 Under construction...
 
